@@ -29,7 +29,9 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const query = searchParams.get('q') || ''
   const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100)
-  const threshold = parseFloat(searchParams.get('threshold') || '0.5')
+  // Lower threshold for short queries (single words need more room)
+  const defaultThreshold = query.trim().split(/\s+/).length <= 2 ? 0.3 : 0.4
+  const threshold = parseFloat(searchParams.get('threshold') || String(defaultThreshold))
 
   if (!query.trim()) {
     return NextResponse.json({ error: 'Missing q parameter' }, { status: 400 })
