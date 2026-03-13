@@ -7,10 +7,13 @@ const OLLAMA_EMBED_URL = process.env.OLLAMA_EMBED_URL || 'https://brain-api.ebfc
 const EMBED_MODEL = 'nomic-embed-text'
 
 async function getEmbedding(text: string): Promise<number[]> {
+  // nomic-embed-text requires "search_query: " prefix for queries
+  // (documents were stored without prefix, which is the default/correct behavior)
+  const prefixedText = `search_query: ${text}`
   const res = await fetch(`${OLLAMA_EMBED_URL}/api/embed`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: EMBED_MODEL, input: text }),
+    body: JSON.stringify({ model: EMBED_MODEL, input: prefixedText }),
   })
 
   if (!res.ok) {
@@ -26,7 +29,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const query = searchParams.get('q') || ''
   const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100)
-  const threshold = parseFloat(searchParams.get('threshold') || '0.3')
+  const threshold = parseFloat(searchParams.get('threshold') || '0.5')
 
   if (!query.trim()) {
     return NextResponse.json({ error: 'Missing q parameter' }, { status: 400 })
