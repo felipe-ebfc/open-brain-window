@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import { SessionWrapper } from '@/components/SessionWrapper'
 
 export const metadata: Metadata = {
   title: 'Open Brain Window',
@@ -27,7 +28,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" style={{ colorScheme: 'dark' }}>
-      <body>{children}</body>
+      <body>
+        <SessionWrapper>{children}</SessionWrapper>
+      </body>
     </html>
   )
 }
