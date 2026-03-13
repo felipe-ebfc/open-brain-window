@@ -9,6 +9,7 @@ import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 
 const SORT_OPTIONS = ['Newest', 'Oldest', 'Category'] as const
 type SortOption = typeof SORT_OPTIONS[number]
+type SearchMode = 'text' | 'semantic'
 
 function ThoughtCard({ thought }: { thought: Thought }) {
   const [expanded, setExpanded] = useState(false)
@@ -67,6 +68,19 @@ function ThoughtCard({ thought }: { thought: Thought }) {
             #{tag}
           </span>
         ))}
+        {thought.similarity != null && (
+          <span style={{
+            background: 'rgba(52, 199, 89, 0.15)',
+            border: '1px solid rgba(52, 199, 89, 0.3)',
+            color: '#34c759',
+            padding: '2px 8px',
+            borderRadius: 9999,
+            fontSize: 11,
+            fontWeight: 700,
+          }}>
+            {Math.round(thought.similarity * 100)}% match
+          </span>
+        )}
         <span style={{
           fontSize: 11,
           color: 'var(--text-muted)',
@@ -83,6 +97,9 @@ export default function ThoughtsPage() {
   const [thoughts, setThoughts] = useState<Thought[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [searchMode, setSearchMode] = useState<SearchMode>('text')
+  const [semanticResults, setSemanticResults] = useState<Thought[] | null>(null)
+  const [semanticLoading, setSemanticLoading] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [sort, setSort] = useState<SortOption>('Newest')
 
@@ -103,12 +120,45 @@ export default function ThoughtsPage() {
     load()
   }, [])
 
+  // Semantic search with debounce
+  useEffect(() => {
+    if (searchMode !== 'semantic' || !search.trim()) {
+      setSemanticResults(null)
+      return
+    }
+
+    const timer = setTimeout(async () => {
+      setSemanticLoading(true)
+      try {
+        const res = await fetch(`/api/brain/search?q=${encodeURIComponent(search)}&limit=50`)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const { thoughts: data } = await res.json()
+        setSemanticResults(data || [])
+      } catch (err) {
+        console.error('Semantic search failed:', err)
+        setSemanticResults([])
+      } finally {
+        setSemanticLoading(false)
+      }
+    }, 600)
+
+    return () => clearTimeout(timer)
+  }, [search, searchMode])
+
   const categories = useMemo(() => {
     const cats = new Set(thoughts.map(t => t.category).filter(Boolean) as string[])
     return ['All', ...Array.from(cats).sort()]
   }, [thoughts])
 
   const filtered = useMemo(() => {
+    // If semantic search returned results, use those (already ranked by similarity)
+    if (searchMode === 'semantic' && semanticResults !== null) {
+      let result = semanticResults.filter(t => {
+        return selectedCategory === 'All' || t.category === selectedCategory
+      })
+      return result
+    }
+
     let result = thoughts.filter(t => {
       const matchCat = selectedCategory === 'All' || t.category === selectedCategory
       const matchSearch = !search ||
@@ -122,7 +172,7 @@ export default function ThoughtsPage() {
     if (sort === 'Category') result = [...result].sort((a, b) => (a.category || '').localeCompare(b.category || ''))
 
     return result
-  }, [thoughts, selectedCategory, search, sort])
+  }, [thoughts, selectedCategory, search, sort, searchMode, semanticResults])
 
   // Group by category for category sort
   const grouped = useMemo(() => {
@@ -171,15 +221,40 @@ export default function ThoughtsPage() {
       </div>
 
       {/* Search */}
-      <div style={{ padding: '16px 16px 8px' }}>
+      <div style={{ padding: '16px 16px 8px', display: 'flex', gap: 8, alignItems: 'center' }}>
         <input
           className="search-input"
           type="search"
-          placeholder="Search thoughts, categories, tags…"
+          placeholder={searchMode === 'semantic' ? 'Semantic search across all thoughts…' : 'Search thoughts, categories, tags…'}
           value={search}
           onChange={e => setSearch(e.target.value)}
+          style={{ flex: 1 }}
         />
+        <button
+          onClick={() => setSearchMode(m => m === 'text' ? 'semantic' : 'text')}
+          title={searchMode === 'semantic' ? 'Semantic search (AI)' : 'Text search'}
+          style={{
+            background: searchMode === 'semantic' ? 'rgba(74, 158, 255, 0.2)' : 'var(--bg-elevated)',
+            border: `1px solid ${searchMode === 'semantic' ? 'var(--accent-blue)' : 'var(--border)'}`,
+            color: searchMode === 'semantic' ? 'var(--accent-blue)' : 'var(--text-muted)',
+            borderRadius: 10,
+            padding: '8px 12px',
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            transition: 'all 0.2s',
+            flexShrink: 0,
+          }}
+        >
+          {searchMode === 'semantic' ? '🧠 AI' : '🔤 Text'}
+        </button>
       </div>
+      {searchMode === 'semantic' && semanticLoading && (
+        <div style={{ padding: '0 16px', fontSize: 12, color: 'var(--accent-blue)', fontWeight: 600 }}>
+          Searching with AI…
+        </div>
+      )}
 
       {/* Sort + Category filters */}
       <div className="no-scrollbar" style={{

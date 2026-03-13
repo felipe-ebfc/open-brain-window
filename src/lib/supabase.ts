@@ -20,8 +20,10 @@ export type Thought = {
   content: string
   category: string
   tags?: string[]
+  people?: string[]
   created_at: string
   source?: string
+  similarity?: number
 }
 
 export type AtlasPaper = {
