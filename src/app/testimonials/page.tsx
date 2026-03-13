@@ -3,7 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, useMemo } from 'react'
-import { supabase, Testimonial } from '@/lib/supabase'
+import { Testimonial } from '@/lib/supabase'
 import { NavHeader } from '@/components/NavHeader'
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 
@@ -68,15 +68,8 @@ export default function TestimonialsPage() {
   const [minRating, setMinRating] = useState(0)
 
   useEffect(() => {
-    async function load() {
-      const { data } = await supabase
-        .from('testimonials')
-        .select('*')
-        .order('created_at', { ascending: false })
-      setItems(data || [])
-      setLoading(false)
-    }
-    load()
+    // testimonials table not yet created — returns empty gracefully
+    setLoading(false)
   }, [])
 
   const sessions = useMemo(() => {

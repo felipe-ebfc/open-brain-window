@@ -3,7 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, useMemo } from 'react'
-import { supabase, AtlasPaper } from '@/lib/supabase'
+import { AtlasPaper } from '@/lib/supabase'
 import { NavHeader } from '@/components/NavHeader'
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 
@@ -195,15 +195,8 @@ export default function AtlasPage() {
   const [selectedCategory, setSelectedCategory] = useState('All')
 
   useEffect(() => {
-    async function load() {
-      const { data } = await supabase
-        .from('atlas_papers')
-        .select('*')
-        .order('year', { ascending: false })
-      setPapers(data || [])
-      setLoading(false)
-    }
-    load()
+    // atlas_papers table not yet created — returns empty gracefully
+    setLoading(false)
   }, [])
 
   const categories = useMemo(() => {

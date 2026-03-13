@@ -3,7 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, useMemo } from 'react'
-import { supabase, Thought } from '@/lib/supabase'
+import { Thought } from '@/lib/supabase'
 import { NavHeader } from '@/components/NavHeader'
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 
@@ -88,12 +88,17 @@ export default function ThoughtsPage() {
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase
-        .from('thoughts')
-        .select('*')
-        .order('created_at', { ascending: false })
-      setThoughts(data || [])
-      setLoading(false)
+      try {
+        const res = await fetch('/api/brain/thoughts?limit=500')
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const { thoughts: data } = await res.json()
+        setThoughts(data || [])
+      } catch (err) {
+        console.error('Failed to load thoughts:', err)
+        setThoughts([])
+      } finally {
+        setLoading(false)
+      }
     }
     load()
   }, [])

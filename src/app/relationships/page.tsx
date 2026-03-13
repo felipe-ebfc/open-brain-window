@@ -3,7 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, useMemo } from 'react'
-import { supabase, Relationship } from '@/lib/supabase'
+import { Relationship } from '@/lib/supabase'
 import { NavHeader } from '@/components/NavHeader'
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 
@@ -110,15 +110,8 @@ export default function RelationshipsPage() {
   const [filter, setFilter] = useState<'All' | 'At Risk' | 'Active'>('All')
 
   useEffect(() => {
-    async function load() {
-      const { data } = await supabase
-        .from('relationships')
-        .select('*')
-        .order('last_contact', { ascending: true })
-      setPeople(data || [])
-      setLoading(false)
-    }
-    load()
+    // relationships table not yet created — returns empty gracefully
+    setLoading(false)
   }, [])
 
   const filtered = useMemo(() => {

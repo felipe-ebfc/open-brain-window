@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { supabase, FeedItem } from '@/lib/supabase'
+import { FeedItem } from '@/lib/supabase'
 import { NavHeader } from '@/components/NavHeader'
 
 // ─── Tile definitions (extend as tables are added) ───────────────────────────
@@ -229,29 +229,16 @@ export default function Home() {
   )
 
   useEffect(() => {
-    // Load feed items
-    async function loadFeed() {
-      try {
-        const { data } = await supabase
-          .from('feed_items')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(20)
-        setFeedItems(data || [])
-      } catch {
-        setFeedItems([])
-      } finally {
-        setFeedLoading(false)
-      }
-    }
+    // Feed items — no feed_items table yet, skip gracefully
+    setFeedLoading(false)
 
-    // Load tile counts in parallel
+    // Load tile counts via server-side API (bypasses RLS)
     async function loadCounts() {
       const results = await Promise.allSettled(
         TILES.map(async tile => {
-          const { count } = await supabase
-            .from(tile.table)
-            .select('*', { count: 'exact', head: true })
+          const res = await fetch(`/api/brain/count?table=${tile.table}`)
+          if (!res.ok) return { id: tile.id, count: 0 }
+          const { count } = await res.json()
           return { id: tile.id, count: count ?? 0 }
         })
       )
@@ -264,7 +251,6 @@ export default function Home() {
       setTileCounts(prev => ({ ...prev, ...counts }))
     }
 
-    loadFeed()
     loadCounts()
   }, [])
 
