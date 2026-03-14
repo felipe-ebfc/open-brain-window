@@ -3,7 +3,7 @@ import { supabaseServer } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
 
-const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434'
+const OLLAMA_URL = process.env.OLLAMA_URL || 'http://brain-api.ebfc.ai'
 
 /**
  * GET /api/brain/memory?q=search+term&type=daily_log&limit=10&days=30
