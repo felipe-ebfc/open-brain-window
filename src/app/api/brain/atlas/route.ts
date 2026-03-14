@@ -52,12 +52,6 @@ export async function GET(req: NextRequest) {
     }
 
     const data = allData
-    const error = null
-
-    if (error) {
-      console.error('[/api/brain/atlas] Supabase error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
 
     // Map thoughts → AtlasPaper shape
     const papers = (data || []).map((row) => {
