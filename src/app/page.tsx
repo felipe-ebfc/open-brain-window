@@ -28,6 +28,15 @@ const TILES = [
     href: '/thoughts',
   },
   {
+    id: 'memory',
+    label: 'Memory',
+    icon: '🧠',
+    table: 'memory',
+    color: '#e91e63',
+    desc: 'Searchable long-term memory',
+    href: '/memory',
+  },
+  {
     id: 'testimonials',
     label: 'RSM Testimonials',
     icon: '⭐',

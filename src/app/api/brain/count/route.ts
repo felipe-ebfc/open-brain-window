@@ -32,6 +32,25 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Virtual table: memory → count thoughts where thought_type='memory'
+  if (table === 'memory') {
+    try {
+      const { count, error } = await supabaseServer
+        .from('thoughts')
+        .select('*', { count: 'exact', head: true })
+        .eq('thought_type', 'memory')
+
+      if (error) {
+        console.warn(`[/api/brain/count] Error counting memory:`, error.message)
+        return NextResponse.json({ table, count: 0 })
+      }
+      return NextResponse.json({ table, count: count ?? 0 })
+    } catch (err) {
+      console.error('[/api/brain/count] Unexpected error:', err)
+      return NextResponse.json({ table, count: 0 })
+    }
+  }
+
   // Tables that haven't been created yet → return 0, no error
   if (!KNOWN_TABLES.has(table)) {
     return NextResponse.json({ table, count: 0 })
