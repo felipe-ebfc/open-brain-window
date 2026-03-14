@@ -13,25 +13,46 @@ export async function GET(req: NextRequest) {
   const category = searchParams.get('category') || ''
 
   try {
-    let query = supabaseServer
-      .from('thoughts')
-      .select('id, content, thought_type, tags, source, metadata, created_at', { count: 'exact' })
-      .eq('thought_type', 'atlas')
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
+    // Fetch all atlas papers using pagination (Supabase default limit is 1000)
+    const allData: any[] = []
+    const pageSize = 1000
+    let page = 0
+    let totalCount = 0
 
-    if (search) {
-      query = query.ilike('content', `%${search}%`)
+    while (true) {
+      let query = supabaseServer
+        .from('thoughts')
+        .select('id, content, thought_type, tags, source, metadata, created_at', { count: 'exact' })
+        .eq('thought_type', 'atlas')
+        .order('created_at', { ascending: false })
+        .range(page * pageSize, (page + 1) * pageSize - 1)
+
+      if (search) {
+        query = query.ilike('content', `%${search}%`)
+      }
+
+      if (era) {
+        const eraNum = era.replace('IGLC-', '')
+        query = query.ilike('source', `iglc-${eraNum}-%`)
+      }
+
+      const { data: pageData, error: pageError, count } = await query
+
+      if (pageError) {
+        console.error('[/api/brain/atlas] Supabase error:', pageError)
+        return NextResponse.json({ error: pageError.message }, { status: 500 })
+      }
+
+      if (count != null) totalCount = count
+      if (!pageData || pageData.length === 0) break
+
+      allData.push(...pageData)
+      if (pageData.length < pageSize) break
+      page++
     }
 
-    // Filter by era (source field is like "iglc-29-2021")
-    if (era) {
-      // era comes in as "IGLC-29" → match source starting with "iglc-29"
-      const eraNum = era.replace('IGLC-', '')
-      query = query.ilike('source', `iglc-${eraNum}-%`)
-    }
-
-    const { data, error, count: totalCount } = await query
+    const data = allData
+    const error = null
 
     if (error) {
       console.error('[/api/brain/atlas] Supabase error:', error)
