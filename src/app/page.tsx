@@ -98,11 +98,16 @@ function FYPCard({ item }: { item: FYPItem }) {
       style={{
         borderRadius: 16,
         padding: 16,
-        minWidth: 280,
-        maxWidth: 320,
+        width: '100%',
+        minHeight: 200,
         cursor: 'pointer',
         borderLeft: `4px solid ${accentColor}`,
+        boxSizing: 'border-box',
+        scrollSnapAlign: 'start',
         flexShrink: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
@@ -163,9 +168,9 @@ function FYPCard({ item }: { item: FYPItem }) {
 
 function FeedSkeleton() {
   return (
-    <div style={{ display: 'flex', gap: 12, padding: '4px 16px' }}>
-      {[280, 260, 300].map((w, i) => (
-        <div key={i} className="skeleton" style={{ minWidth: w, height: 90, borderRadius: 16, flexShrink: 0 }} />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '4px 16px' }}>
+      {[1, 2].map((i) => (
+        <div key={i} className="skeleton" style={{ width: '100%', height: 200, borderRadius: 16 }} />
       ))}
     </div>
   )
@@ -341,8 +346,11 @@ export default function Home() {
             className="no-scrollbar"
             style={{
               display: 'flex',
+              flexDirection: 'column',
               gap: 12,
-              overflowX: 'auto',
+              overflowY: 'auto',
+              scrollSnapType: 'y mandatory',
+              height: 300,
               padding: '4px 16px 16px',
             }}
           >
