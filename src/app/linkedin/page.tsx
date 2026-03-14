@@ -23,302 +23,172 @@ type Counts = {
   positions: number
 }
 
-type Tab = 'posts' | 'connections' | 'comments' | 'endorsements' | 'positions'
+type TypeFilter = 'all' | 'posts' | 'connections' | 'comments' | 'endorsements' | 'positions'
+type SortOption = 'Newest' | 'Oldest' | 'Type'
+type SearchMode = 'text' | 'tags'
 
-const TABS: { key: Tab; label: string; short: string }[] = [
-  { key: 'posts', label: 'Posts', short: 'Post' },
-  { key: 'connections', label: 'Connections', short: 'Conn' },
-  { key: 'comments', label: 'Comments', short: 'Cmnt' },
-  { key: 'endorsements', label: 'Endorsements', short: 'End.' },
-  { key: 'positions', label: 'Positions', short: 'Pos.' },
+const SORT_OPTIONS: SortOption[] = ['Newest', 'Oldest', 'Type']
+
+const TYPE_FILTERS: { key: TypeFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'posts', label: 'Posts' },
+  { key: 'connections', label: 'Connections' },
+  { key: 'comments', label: 'Comments' },
+  { key: 'endorsements', label: 'Endorsements' },
+  { key: 'positions', label: 'Positions' },
 ]
 
-function TabSelector({
-  activeTab,
-  counts,
-  onChange,
-}: {
-  activeTab: Tab
-  counts: Counts | null
-  onChange: (tab: Tab) => void
-}) {
-  const total = counts
-    ? counts.connections + counts.posts + counts.comments + counts.endorsements + counts.positions
-    : null
-
-  return (
-    <div style={{
-      padding: '8px 16px 4px',
-      borderBottom: '1px solid var(--border)',
-      background: 'var(--bg-surface)',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap', gap: 4 }}>
-        {/* Total pill — non-clickable */}
-        <div style={{
-          display: 'flex', flexDirection: 'column', alignItems: 'center',
-          gap: 4, padding: '4px 6px',
-        }}>
-          <div style={{
-            width: 34, height: 34, borderRadius: '50%',
-            background: 'var(--bg-elevated)', border: '2px solid #0077b5',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 7, fontWeight: 800, color: '#0077b5',
-          }}>
-            All
-          </div>
-          <div style={{ fontSize: 8, color: 'var(--text-muted)', fontWeight: 600 }}>
-            {total !== null ? total.toLocaleString() : '—'}
-          </div>
-        </div>
-
-        {TABS.map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => onChange(tab.key)}
-            style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center',
-              gap: 4, background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px',
-            }}
-          >
-            <div style={{
-              width: 34, height: 34, borderRadius: '50%',
-              background: activeTab === tab.key ? '#0077b5' : 'var(--bg-elevated)',
-              border: '2px solid #0077b5',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 7, fontWeight: 800,
-              color: activeTab === tab.key ? '#fff' : '#0077b5',
-              transition: 'all 0.15s',
-            }}>
-              {tab.short}
-            </div>
-            <div style={{ fontSize: 8, color: 'var(--text-muted)', fontWeight: 600 }}>
-              {counts ? counts[tab.key].toLocaleString() : '—'}
-            </div>
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function PostCard({ item }: { item: LinkedInItem }) {
+function LinkedInCard({ item }: { item: LinkedInItem }) {
   const [expanded, setExpanded] = useState(false)
-  const campaign = item.metadata?.campaign?.replace('campaign-', '') || null
+  const rawType = item.thought_type?.replace('linkedin_', '') || 'item'
+  const typeLabel = rawType.charAt(0).toUpperCase() + rawType.slice(1)
+  const isExpandable = rawType !== 'connection' && rawType !== 'endorsement' && rawType !== 'position'
 
-  return (
-    <div
-      className="paper-card pressable"
-      onClick={() => setExpanded(e => !e)}
-      style={{ borderLeft: '3px solid #0077b5', cursor: 'pointer', overflow: 'hidden' }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {campaign && (
-            <div style={{
-              fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
-              color: '#0077b5', letterSpacing: '0.05em', marginBottom: 4,
-            }}>
-              {campaign}
-            </div>
-          )}
+  const renderContent = () => {
+    if (rawType === 'connection') {
+      const lines = item.content.split('\n').filter(Boolean)
+      const name = lines[0] || item.content.slice(0, 80)
+      const titleCompany = lines[1] || ''
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
-            fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.5,
-            display: expanded ? 'block' : '-webkit-box',
-            WebkitLineClamp: expanded ? 'unset' : 3,
-            WebkitBoxOrient: 'vertical' as const,
-            overflow: expanded ? 'visible' : 'hidden',
-            whiteSpace: 'pre-line',
+            width: 36, height: 36, borderRadius: '50%',
+            background: '#0077b5', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#fff', fontWeight: 700, fontSize: 14, flexShrink: 0,
           }}>
-            {item.content}
+            {name.trim().charAt(0).toUpperCase()}
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {name}
+            </div>
+            {titleCompany && (
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {titleCompany}
+              </div>
+            )}
           </div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
-          {item.metadata?.has_image && (
-            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>📷</span>
-          )}
-          <span style={{
-            fontSize: 14, color: 'var(--text-muted)', display: 'inline-block',
-            transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-            transition: 'transform 0.15s',
-          }}>▾</span>
-        </div>
-      </div>
-      {expanded && item.tags.length > 0 && (
-        <div style={{ display: 'flex', gap: 4, marginTop: 8, flexWrap: 'wrap' }}>
-          {item.tags.filter(t => !t.startsWith('linkedin')).map(tag => (
-            <span key={tag} style={{
-              padding: '2px 6px', borderRadius: 9999,
-              background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-              fontSize: 10, color: 'var(--text-muted)',
+      )
+    }
+
+    if (rawType === 'endorsement') {
+      const skill = item.content.split('\n')[0] || item.content.slice(0, 60)
+      const count = item.metadata?.endorsement_count || item.metadata?.count || null
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 14, flexShrink: 0 }}>⭐</span>
+          <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {skill}
+          </span>
+          {count != null && (
+            <span style={{
+              background: 'rgba(0,119,181,0.15)', border: '1px solid rgba(0,119,181,0.3)',
+              borderRadius: 9999, fontSize: 10, fontWeight: 700, color: '#0077b5', padding: '2px 7px', flexShrink: 0,
             }}>
-              #{tag}
+              {count}
             </span>
-          ))}
+          )}
         </div>
-      )}
-    </div>
-  )
-}
+      )
+    }
 
-function ConnectionCard({ item }: { item: LinkedInItem }) {
-  // Parse 'FirstName LastName\nTitle at Company\nConnected on Date'
-  const lines = item.content.split('\n').filter(Boolean)
-  const name = lines[0] || item.content.slice(0, 80)
-  const titleCompany = lines[1] || ''
-  const connectedDate = lines[2] || ''
+    if (rawType === 'position') {
+      const lines = item.content.split('\n').filter(Boolean)
+      const title = lines[0] || ''
+      const company = lines[1] || ''
+      const dateRange = lines[2] || lines.find(l => /\d{4}|[Pp]resent/.test(l)) || ''
+      return (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {title}
+            </div>
+            {company && (
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {company}
+              </div>
+            )}
+          </div>
+          {dateRange && (
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+              {dateRange}
+            </div>
+          )}
+        </div>
+      )
+    }
 
-  return (
-    <div className="paper-card" style={{
-      borderLeft: '3px solid #0077b5', padding: '10px 12px',
-      display: 'flex', alignItems: 'center', gap: 10, overflow: 'hidden',
-    }}>
+    // Posts and comments
+    return (
       <div style={{
-        width: 36, height: 36, borderRadius: '50%',
-        background: '#0077b5', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: '#fff', fontWeight: 700, fontSize: 14, flexShrink: 0,
+        fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.5,
+        display: expanded ? 'block' : '-webkit-box',
+        WebkitLineClamp: expanded ? 'unset' : 3,
+        WebkitBoxOrient: 'vertical' as const,
+        overflow: expanded ? 'visible' : 'hidden',
+        whiteSpace: 'pre-line',
       }}>
-        {name.trim().charAt(0).toUpperCase()}
+        {item.content}
       </div>
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{
-          fontSize: 13, fontWeight: 700, color: 'var(--text-primary)',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>
-          {name}
-        </div>
-        {titleCompany && (
-          <div style={{
-            fontSize: 11, color: 'var(--text-secondary)', marginTop: 1,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            {titleCompany}
-          </div>
-        )}
-        {connectedDate && (
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
-            {connectedDate}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function CommentCard({ item }: { item: LinkedInItem }) {
-  const [expanded, setExpanded] = useState(false)
-  const lines = item.content.split('\n').filter(Boolean)
-  const firstLine = lines[0] || item.content.slice(0, 100)
-  const rest = lines.slice(1).join('\n')
+    )
+  }
 
   return (
     <div
-      className="paper-card pressable"
-      onClick={() => setExpanded(e => !e)}
-      style={{ borderLeft: '3px solid #0077b5', cursor: 'pointer', overflow: 'hidden' }}
+      className={`paper-card${isExpandable ? ' pressable' : ''}`}
+      onClick={isExpandable ? () => setExpanded(e => !e) : undefined}
+      style={{ borderLeft: '3px solid #0077b5', cursor: isExpandable ? 'pointer' : 'default', overflow: 'hidden' }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.4 }}>
-            {firstLine}
-          </div>
-          {expanded && rest && (
-            <div style={{
-              fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, marginTop: 8,
-              borderTop: '1px solid var(--border)', paddingTop: 8, whiteSpace: 'pre-line',
-            }}>
-              {rest}
-            </div>
-          )}
-        </div>
-        <span style={{
-          fontSize: 14, color: 'var(--text-muted)', flexShrink: 0, display: 'inline-block',
-          transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-          transition: 'transform 0.15s',
-        }}>▾</span>
-      </div>
-      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>
-        {new Date(item.created_at).toLocaleDateString()}
-      </div>
-    </div>
-  )
-}
+      {renderContent()}
 
-function EndorsementCard({ item }: { item: LinkedInItem }) {
-  const skill = item.content.split('\n')[0] || item.content.slice(0, 60)
-  const count = item.metadata?.endorsement_count || item.metadata?.count || null
-
-  return (
-    <div className="paper-card" style={{
-      borderLeft: '3px solid #0077b5', padding: '8px 12px',
-      display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden',
-    }}>
-      <span style={{ fontSize: 14, flexShrink: 0 }}>⭐</span>
-      <span style={{
-        fontSize: 13, color: 'var(--text-primary)', fontWeight: 500,
-        flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      }}>
-        {skill}
-      </span>
-      {count != null && (
+      {/* Metadata row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
         <span style={{
-          background: 'rgba(0,119,181,0.15)', border: '1px solid rgba(0,119,181,0.3)',
-          borderRadius: 9999, fontSize: 10, fontWeight: 700, color: '#0077b5',
-          padding: '2px 7px', flexShrink: 0,
+          background: 'rgba(0,119,181,0.15)',
+          border: '1px solid rgba(0,119,181,0.3)',
+          color: '#0077b5',
+          padding: '2px 10px',
+          borderRadius: 9999,
+          fontSize: 11,
+          fontWeight: 700,
         }}>
-          {count}
+          {typeLabel}
         </span>
-      )}
-    </div>
-  )
-}
-
-function PositionCard({ item }: { item: LinkedInItem }) {
-  const lines = item.content.split('\n').filter(Boolean)
-  const title = lines[0] || ''
-  const company = lines[1] || ''
-  const dateRange = lines[2] || lines.find(l => /\d{4}|[Pp]resent/.test(l)) || ''
-
-  return (
-    <div className="paper-card" style={{ borderLeft: '3px solid #0077b5', padding: '10px 12px', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{
-            fontSize: 13, fontWeight: 600, color: 'var(--text-primary)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        {item.tags?.filter(t => !t.startsWith('linkedin')).slice(0, 3).map(tag => (
+          <span key={tag} style={{
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border)',
+            color: 'var(--text-muted)',
+            padding: '2px 8px',
+            borderRadius: 9999,
+            fontSize: 11,
           }}>
-            {title}
-          </div>
-          {company && (
-            <div style={{
-              fontSize: 11, color: 'var(--text-secondary)', marginTop: 2,
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>
-              {company}
-            </div>
-          )}
-        </div>
-        {dateRange && (
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0, whiteSpace: 'nowrap' }}>
-            {dateRange}
-          </div>
-        )}
+            #{tag}
+          </span>
+        ))}
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>
+          {new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+        </span>
       </div>
     </div>
   )
 }
 
 export default function LinkedInPage() {
-  const [activeTab, setActiveTab] = useState<Tab>('posts')
+  const [selectedType, setSelectedType] = useState<TypeFilter>('posts')
   const [items, setItems] = useState<LinkedInItem[]>([])
   const [counts, setCounts] = useState<Counts | null>(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [searchMode, setSearchMode] = useState<SearchMode>('text')
+  const [sort, setSort] = useState<SortOption>('Newest')
 
-  const loadTab = useCallback(async (tab: Tab) => {
+  const loadType = useCallback(async (type: Exclude<TypeFilter, 'all'>) => {
     setLoading(true)
     try {
-      const limit = tab === 'connections' ? 200 : 100
-      const res = await fetch(`/api/brain/linkedin?type=${tab}&limit=${limit}`)
+      const limit = type === 'connections' ? 200 : 100
+      const res = await fetch(`/api/brain/linkedin?type=${type}&limit=${limit}`)
       if (!res.ok) throw new Error(`API error: ${res.status}`)
       const data = await res.json()
       setItems(data.items || [])
@@ -332,86 +202,185 @@ export default function LinkedInPage() {
   }, [])
 
   useEffect(() => {
-    loadTab('posts')
-  }, [loadTab])
+    loadType('posts')
+  }, [loadType])
 
-  const handleTabChange = (tab: Tab) => {
-    if (tab === activeTab) return
-    setActiveTab(tab)
+  const handleTypeChange = (type: TypeFilter) => {
+    if (type === selectedType) return
+    setSelectedType(type)
     setSearch('')
-    setItems([])
-    loadTab(tab)
+    if (type !== 'all') {
+      setItems([])
+      loadType(type)
+    }
+  }
+
+  const total = counts
+    ? counts.connections + counts.posts + counts.comments + counts.endorsements + counts.positions
+    : null
+
+  const getCount = (type: TypeFilter): number | null => {
+    if (!counts) return null
+    if (type === 'all') return total
+    return counts[type as keyof Counts] ?? null
   }
 
   const filtered = useMemo(() => {
-    if (!search) return items
-    const q = search.toLowerCase()
-    return items.filter(item => item.content.toLowerCase().includes(q))
-  }, [items, search])
+    let result = [...items]
 
-  const activeLabel = TABS.find(t => t.key === activeTab)?.label ?? activeTab
+    if (search) {
+      const q = search.toLowerCase()
+      if (searchMode === 'text') {
+        result = result.filter(item => item.content.toLowerCase().includes(q))
+      } else {
+        result = result.filter(item =>
+          item.tags?.some(tag => tag.toLowerCase().includes(q))
+        )
+      }
+    }
+
+    if (sort === 'Newest') {
+      result = result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    } else if (sort === 'Oldest') {
+      result = result.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    } else if (sort === 'Type') {
+      result = result.sort((a, b) => (a.thought_type || '').localeCompare(b.thought_type || ''))
+    }
+
+    return result
+  }, [items, search, searchMode, sort])
+
+  const grouped = useMemo(() => {
+    if (sort !== 'Type') return null
+    const groups: Record<string, LinkedInItem[]> = {}
+    filtered.forEach(item => {
+      const type = item.thought_type?.replace('linkedin_', '') || 'other'
+      if (!groups[type]) groups[type] = []
+      groups[type].push(item)
+    })
+    return groups
+  }, [filtered, sort])
 
   return (
     <main style={{ background: 'var(--bg-base)', minHeight: '100dvh', paddingBottom: 32 }}>
       <NavHeader title="LinkedIn Data" back />
 
-      {/* Combined tab + stats selector */}
-      <TabSelector activeTab={activeTab} counts={counts} onChange={handleTabChange} />
+      {/* Stats bar */}
+      <div style={{
+        display: 'flex',
+        gap: 0,
+        borderBottom: '1px solid var(--border)',
+        padding: '12px 16px',
+        background: 'var(--bg-surface)',
+      }}>
+        <div style={{ flex: 1, textAlign: 'center' }}>
+          <div style={{ fontSize: 24, fontWeight: 800, color: '#0077b5', letterSpacing: '-0.04em' }}>
+            {total !== null ? total.toLocaleString() : '—'}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Total</div>
+        </div>
+        <div style={{ width: 1, background: 'var(--border)' }} />
+        <div style={{ flex: 1, textAlign: 'center' }}>
+          <div style={{ fontSize: 24, fontWeight: 800, color: '#0077b5', letterSpacing: '-0.04em' }}>5</div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Types</div>
+        </div>
+        <div style={{ width: 1, background: 'var(--border)' }} />
+        <div style={{ flex: 1, textAlign: 'center' }}>
+          <div style={{ fontSize: 24, fontWeight: 800, color: '#0077b5', letterSpacing: '-0.04em' }}>
+            {loading ? '—' : filtered.length}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Showing</div>
+        </div>
+      </div>
 
       {/* Search */}
-      <div style={{ padding: '16px 16px 8px', position: 'relative' }}>
+      <div style={{ padding: '16px 16px 8px', display: 'flex', gap: 8, alignItems: 'center' }}>
         <input
           className="search-input"
           type="search"
-          placeholder={`Search ${activeLabel.toLowerCase()}…`}
+          placeholder={searchMode === 'tags' ? 'Search by tag…' : 'Search content…'}
           value={search}
           onChange={e => setSearch(e.target.value)}
-          style={{ paddingRight: search ? 36 : undefined }}
+          style={{ flex: 1 }}
         />
-        {search && (
+        <button
+          onClick={() => setSearchMode(m => m === 'text' ? 'tags' : 'text')}
+          style={{
+            background: searchMode === 'tags' ? 'rgba(0,119,181,0.2)' : 'var(--bg-elevated)',
+            border: `1px solid ${searchMode === 'tags' ? '#0077b5' : 'var(--border)'}`,
+            color: searchMode === 'tags' ? '#0077b5' : 'var(--text-muted)',
+            borderRadius: 10,
+            padding: '8px 12px',
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            transition: 'all 0.2s',
+            flexShrink: 0,
+          }}
+        >
+          {searchMode === 'tags' ? '🏷️ Tags' : '🔤 Text'}
+        </button>
+      </div>
+
+      {/* Sort chips */}
+      <div style={{ display: 'flex', gap: 6, padding: '8px 16px 4px' }}>
+        {SORT_OPTIONS.map(opt => (
           <button
-            onClick={() => setSearch('')}
-            style={{
-              position: 'absolute', right: 28, top: '50%', transform: 'translateY(-50%)',
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: 'var(--text-muted)', fontSize: 16, lineHeight: 1, padding: '0 4px',
-            }}
+            key={opt}
+            className={`filter-chip ${sort === opt ? 'active' : ''}`}
+            onClick={() => setSort(opt)}
+            style={{ fontSize: 11 }}
           >
-            ×
+            {opt}
           </button>
-        )}
+        ))}
       </div>
 
-      {/* Results count */}
-      <div style={{ padding: '0 16px 12px', fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>
-        <span style={{ color: '#0077b5', fontWeight: 800 }}>{loading ? '—' : filtered.length}</span>
-        {' '}items · {activeLabel}
+      {/* Type filter chips */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '8px 16px 12px' }}>
+        {TYPE_FILTERS.map(({ key, label }) => {
+          const count = getCount(key)
+          return (
+            <button
+              key={key}
+              className={`filter-chip ${selectedType === key ? 'active' : ''}`}
+              onClick={() => handleTypeChange(key)}
+            >
+              {label}
+              {count !== null && (
+                <span style={{ opacity: 0.6, marginLeft: 2 }}>({count.toLocaleString()})</span>
+              )}
+            </button>
+          )
+        })}
       </div>
 
-      {/* Content list */}
-      <div style={{
-        padding: '0 16px',
-        display: 'flex', flexDirection: 'column',
-        gap: activeTab === 'endorsements' ? 6 : 10,
-      }}>
+      {/* Results */}
+      <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {loading ? (
-          <LoadingSkeleton
-            count={6}
-            height={activeTab === 'connections' || activeTab === 'endorsements' ? 56 : 90}
-          />
+          <LoadingSkeleton count={6} height={90} />
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px 0', fontSize: 14 }}>
-            {search ? 'No results match your search.' : `No ${activeLabel.toLowerCase()} found.`}
+            {search ? 'No results match your search.' : 'No items found.'}
           </div>
+        ) : grouped ? (
+          Object.entries(grouped).map(([type, typeItems]) => (
+            <div key={type}>
+              <div style={{
+                fontSize: 11, fontWeight: 800, color: '#0077b5',
+                letterSpacing: '0.1em', textTransform: 'uppercase',
+                padding: '12px 0 8px', borderTop: '1px solid var(--border)', marginTop: 4,
+              }}>
+                {type} · {typeItems.length}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {typeItems.map(item => <LinkedInCard key={item.id} item={item} />)}
+              </div>
+            </div>
+          ))
         ) : (
-          filtered.map(item => {
-            if (activeTab === 'posts') return <PostCard key={item.id} item={item} />
-            if (activeTab === 'connections') return <ConnectionCard key={item.id} item={item} />
-            if (activeTab === 'comments') return <CommentCard key={item.id} item={item} />
-            if (activeTab === 'endorsements') return <EndorsementCard key={item.id} item={item} />
-            if (activeTab === 'positions') return <PositionCard key={item.id} item={item} />
-            return null
-          })
+          filtered.map(item => <LinkedInCard key={item.id} item={item} />)
         )}
       </div>
     </main>
