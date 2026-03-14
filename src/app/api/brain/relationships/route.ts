@@ -3,7 +3,7 @@ import { supabaseServer } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
 
-// Content is stored as labeled lines:
+// Parse legacy manual entry format:
 // Name: Jane Doe
 // Role: Product Manager
 // Company: Acme Corp
@@ -36,68 +36,119 @@ function formatContent(name: string, role?: string, company?: string, notes?: st
 }
 
 function toRelationship(row: any) {
+  const meta = (row.metadata || {}) as Record<string, unknown>
+
+  // New extraction pipeline format: metadata has name, company, position, sources, etc.
+  if (meta.name) {
+    return {
+      id: row.id,
+      name: (meta.name as string) || 'Unknown',
+      position: (meta.position as string) || null,
+      company: (meta.company as string) || null,
+      warmth: typeof meta.warmth === 'number' ? (meta.warmth as number) : null,
+      brain_mentions: (meta.brain_mentions as number) || 0,
+      linkedin_interactions: (meta.linkedin_interactions as number) || 0,
+      has_testimonial: (meta.has_testimonial as boolean) || false,
+      has_endorsement: (meta.has_endorsement as boolean) || false,
+      email: (meta.email as string) || null,
+      linkedin_url: (meta.linkedin_url as string) || null,
+      connected_on: (meta.connected_on as string) || null,
+      sources: (meta.sources as string[]) || [],
+      tags: row.tags || [],
+      created_at: row.created_at,
+    }
+  }
+
+  // Legacy manual entry format
   const parsed = parseContent(row.content || '')
-  const meta = row.metadata || {}
   return {
     id: row.id,
     name: parsed.name,
-    role: meta.role || parsed.role || null,
-    company: meta.company || parsed.company || null,
-    org: meta.company || parsed.company || null,
-    warmth: meta.warmth ?? null,
-    last_contact: meta.last_contact ?? null,
+    position: (meta.role as string) || parsed.role || null,
+    company: (meta.company as string) || parsed.company || null,
+    warmth: typeof meta.warmth === 'number' ? (meta.warmth as number) : null,
+    brain_mentions: 0,
+    linkedin_interactions: 0,
+    has_testimonial: false,
+    has_endorsement: false,
+    email: null,
+    linkedin_url: null,
+    connected_on: (meta.last_contact as string) || null,
+    sources: ['manual'],
     tags: row.tags || [],
-    notes: parsed.notes || null,
-    source: meta.source || 'manual',
     created_at: row.created_at,
   }
 }
 
-// GET /api/brain/relationships?limit=200&search=&warmth=
+// GET /api/brain/relationships?search=&warmth=&source=
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
-  const limit = Math.min(parseInt(searchParams.get('limit') || '200'), 500)
   const search = searchParams.get('search') || ''
   const warmthParam = searchParams.get('warmth')
   const warmthFilter = warmthParam ? parseInt(warmthParam) : null
+  const sourceFilter = searchParams.get('source') || ''
 
   try {
-    const { data, error } = await supabaseServer
-      .from('thoughts')
-      .select('id, content, tags, metadata, created_at')
-      .eq('thought_type', 'relationship')
-      .order('created_at', { ascending: false })
-      .limit(limit)
+    // Fetch all relationships using pagination (Supabase default limit is 1000)
+    const allData: any[] = []
+    const pageSize = 1000
+    let page = 0
+    let totalCount = 0
 
-    if (error) {
-      console.error('[/api/brain/relationships] GET error:', error)
-      return NextResponse.json({ items: [] })
+    while (true) {
+      const { data: pageData, error: pageError, count } = await supabaseServer
+        .from('thoughts')
+        .select('id, content, tags, metadata, created_at', { count: 'exact' })
+        .eq('thought_type', 'relationship')
+        .order('created_at', { ascending: false })
+        .range(page * pageSize, (page + 1) * pageSize - 1)
+
+      if (pageError) {
+        console.error('[/api/brain/relationships] Supabase error:', pageError)
+        return NextResponse.json({ error: pageError.message }, { status: 500 })
+      }
+
+      if (count != null) totalCount = count
+      if (!pageData || pageData.length === 0) break
+
+      allData.push(...pageData)
+      if (pageData.length < pageSize) break
+      page++
     }
 
-    let items = (data || []).map(toRelationship)
+    // Map rows to relationship shape (handles both new and legacy formats)
+    let items = allData.map(toRelationship)
 
+    // Optional server-side filters
     if (search) {
       const q = search.toLowerCase()
       items = items.filter(r =>
         r.name.toLowerCase().includes(q) ||
-        (r.role || '').toLowerCase().includes(q) ||
-        (r.company || '').toLowerCase().includes(q) ||
-        (r.tags || []).some((t: string) => t.toLowerCase().includes(q))
+        (r.position || '').toLowerCase().includes(q) ||
+        (r.company || '').toLowerCase().includes(q)
       )
     }
 
-    if (warmthFilter !== null) {
+    if (warmthFilter !== null && !isNaN(warmthFilter)) {
       items = items.filter(r => r.warmth === warmthFilter)
     }
 
-    return NextResponse.json({ items })
+    if (sourceFilter) {
+      items = items.filter(r => (r.sources || []).includes(sourceFilter))
+    }
+
+    return NextResponse.json({
+      items,
+      count: items.length,
+      total: totalCount,
+    })
   } catch (err) {
     console.error('[/api/brain/relationships] Unexpected error:', err)
-    return NextResponse.json({ items: [] })
+    return NextResponse.json({ items: [], count: 0, total: 0 }, { status: 500 })
   }
 }
 
-// POST /api/brain/relationships
+// POST /api/brain/relationships — legacy manual entry support
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()

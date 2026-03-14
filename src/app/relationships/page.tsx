@@ -2,440 +2,259 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useEffect, useState, useMemo, useCallback } from 'react'
-import { Relationship } from '@/lib/supabase'
+import { useEffect, useState, useMemo } from 'react'
 import { NavHeader } from '@/components/NavHeader'
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type Relationship = {
+  id: string
+  name: string
+  position: string | null
+  company: string | null
+  warmth: number | null
+  brain_mentions: number
+  linkedin_interactions: number
+  has_testimonial: boolean
+  has_endorsement: boolean
+  email: string | null
+  linkedin_url: string | null
+  connected_on: string | null
+  sources: string[]
+  tags: string[]
+  created_at: string
+}
+
+type SortKey = 'warmth' | 'name' | 'brain' | 'linkedin'
+type WarmthFilter = 'All' | 1 | 2 | 3 | 4 | 5
+type SourceFilterKey = 'All' | 'LinkedIn' | 'Brain' | 'Testimonial' | 'Endorsement'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const WARMTH_COLORS = ['#e84040', '#f5983a', '#f5c842', '#4caf50', '#00b8a9']
-const WARMTH_LABELS = ['Cold', 'Cooling', 'Neutral', 'Active', '🔥 Hot']
+const WARMTH_LABELS = ['Cold', 'Cooling', 'Neutral', 'Active', 'Hot']
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function daysSince(dateStr: string): number {
-  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86_400_000)
+const SOURCE_LABELS: Record<string, string> = {
+  'linkedin-connection': 'LinkedIn',
+  'linkedin-comment': 'LI Comment',
+  'brain': 'Brain',
+  'brain-llm-extract': 'Brain AI',
+  'testimonial': 'Testimonial',
+  'endorsement': 'Endorsement',
+  'manual': 'Manual',
 }
 
-function avgWarmth(people: Relationship[]): number | null {
-  const withWarmth = people.filter(p => p.warmth)
-  if (!withWarmth.length) return null
-  return withWarmth.reduce((sum, p) => sum + (p.warmth ?? 0), 0) / withWarmth.length
+const SOURCE_COLORS: Record<string, string> = {
+  'linkedin-connection': '#0077b5',
+  'linkedin-comment': '#0077b5',
+  'brain': '#9b59b6',
+  'brain-llm-extract': '#9b59b6',
+  'testimonial': '#f5c842',
+  'endorsement': '#4caf50',
+  'manual': '#888',
 }
+
+const SOURCE_FILTER_GROUPS: Record<string, string[]> = {
+  'LinkedIn': ['linkedin-connection', 'linkedin-comment'],
+  'Brain': ['brain', 'brain-llm-extract'],
+  'Testimonial': ['testimonial'],
+  'Endorsement': ['endorsement'],
+}
+
+const PAGE_SIZE = 50
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function WarmthDots({ warmth }: { warmth: number }) {
   const color = WARMTH_COLORS[warmth - 1]
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-      <div style={{ display: 'flex', gap: 3 }}>
-        {[1, 2, 3, 4, 5].map(i => (
-          <div key={i} style={{
-            width: 10,
-            height: 10,
-            borderRadius: 2,
-            background: i <= warmth ? color : 'var(--border)',
-            transition: 'background 0.15s',
-          }} />
-        ))}
-      </div>
-      <div style={{ fontSize: 9, color: 'var(--text-muted)' }}>{WARMTH_LABELS[warmth - 1]}</div>
-    </div>
-  )
-}
-
-function WarmthPicker({
-  value,
-  onChange,
-}: {
-  value: number
-  onChange: (v: number) => void
-}) {
-  return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-      {[1, 2, 3, 4, 5].map(w => (
-        <button
-          key={w}
-          onClick={() => onChange(w)}
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: '50%',
-            border: `2px solid ${value === w ? WARMTH_COLORS[w - 1] : 'var(--border)'}`,
-            background: value === w ? `${WARMTH_COLORS[w - 1]}22` : 'var(--bg-card)',
-            color: value === w ? WARMTH_COLORS[w - 1] : 'var(--text-muted)',
-            fontSize: 13,
-            fontWeight: 800,
-            cursor: 'pointer',
-            transition: 'all 0.15s',
-          }}
-        >
-          {w}
-        </button>
+    <div style={{ display: 'flex', gap: 3 }}>
+      {[1, 2, 3, 4, 5].map(i => (
+        <div key={i} style={{
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          background: i <= warmth ? color : 'var(--border)',
+        }} />
       ))}
     </div>
   )
 }
 
-function RelationshipCard({
-  person,
-  onDelete,
-}: {
-  person: Relationship
-  onDelete: (id: string) => void
-}) {
+function SourcePill({ source }: { source: string }) {
+  const label = SOURCE_LABELS[source] || source
+  const color = SOURCE_COLORS[source] || 'var(--text-muted)'
+  return (
+    <span style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      padding: '2px 7px',
+      borderRadius: 9999,
+      fontSize: 10,
+      fontWeight: 600,
+      background: `${color}18`,
+      border: `1px solid ${color}44`,
+      color: color,
+    }}>
+      {label}
+    </span>
+  )
+}
+
+function RelationshipCard({ person }: { person: Relationship }) {
   const [expanded, setExpanded] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-
-  const days = person.last_contact ? daysSince(person.last_contact) : null
-  const isAtRisk = days !== null && days > 60
-  const isWarning = days !== null && days > 30 && days <= 60
-
-  async function handleDelete(e: React.MouseEvent) {
-    e.stopPropagation()
-    if (!confirm(`Remove ${person.name} from your network?`)) return
-    setDeleting(true)
-    await fetch(`/api/brain/relationships?id=${person.id}`, { method: 'DELETE' })
-    onDelete(person.id)
-  }
+  const warmthColor = person.warmth ? WARMTH_COLORS[person.warmth - 1] : 'var(--border-bright)'
 
   return (
     <div
-      className="pressable"
+      className="paper-card pressable"
       onClick={() => setExpanded(e => !e)}
       style={{
-        background: 'var(--bg-card)',
-        border: `1px solid ${isAtRisk ? 'rgba(232, 64, 64, 0.4)' : isWarning ? 'rgba(245, 166, 35, 0.3)' : 'var(--border)'}`,
-        borderRadius: 12,
-        padding: 14,
+        borderLeft: `3px solid ${warmthColor}`,
         cursor: 'pointer',
-        opacity: deleting ? 0.5 : 1,
-        transition: 'opacity 0.2s',
       }}
     >
       {/* Header row */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
+          <div style={{
+            fontSize: 14,
+            fontWeight: 700,
+            color: 'var(--text-primary)',
+            lineHeight: 1.3,
+          }}>
             {person.name}
           </div>
-          {(person.role || person.company) && (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-              {[person.role, person.company].filter(Boolean).join(' · ')}
+          {(person.position || person.company) && (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
+              {[person.position, person.company].filter(Boolean).join(' · ')}
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, marginLeft: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5, flexShrink: 0 }}>
           {person.warmth && <WarmthDots warmth={person.warmth} />}
           <span style={{
-            fontSize: 16,
+            fontSize: 14,
             color: 'var(--text-muted)',
-            display: 'inline-block',
-            transform: `rotate(${expanded ? 90 : 0}deg)`,
+            transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
             transition: 'transform 0.15s',
-            lineHeight: 1,
-          }}>›</span>
+            display: 'inline-block',
+          }}>▾</span>
         </div>
       </div>
 
-      {/* Meta row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-        <span style={{
-          padding: '3px 10px',
-          borderRadius: 9999,
-          fontSize: 11,
-          fontWeight: 700,
-          background: isAtRisk
-            ? 'rgba(232, 64, 64, 0.15)'
-            : isWarning
-              ? 'rgba(245, 166, 35, 0.15)'
-              : 'var(--bg-elevated)',
-          color: isAtRisk ? '#e84040' : isWarning ? 'var(--accent-gold)' : 'var(--text-muted)',
-          border: `1px solid ${isAtRisk ? 'rgba(232, 64, 64, 0.3)' : isWarning ? 'rgba(245, 166, 35, 0.3)' : 'var(--border)'}`,
-        }}>
-          {days === null ? 'Never' : days === 0 ? 'Today' : `${days}d ago`}
-        </span>
-        {person.tags?.map(tag => (
-          <span key={tag} style={{
-            background: 'var(--bg-elevated)',
-            border: '1px solid var(--border)',
-            color: 'var(--text-muted)',
+      {/* Metrics + sources row */}
+      <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        {person.brain_mentions > 0 && (
+          <span style={{
             padding: '2px 8px',
             borderRadius: 9999,
+            background: 'rgba(155, 89, 182, 0.12)',
+            border: '1px solid rgba(155, 89, 182, 0.3)',
             fontSize: 11,
+            color: '#9b59b6',
+            fontWeight: 600,
           }}>
-            {tag}
+            ◆ {person.brain_mentions}
           </span>
+        )}
+        {person.linkedin_interactions > 0 && (
+          <span style={{
+            padding: '2px 8px',
+            borderRadius: 9999,
+            background: 'rgba(0, 119, 181, 0.12)',
+            border: '1px solid rgba(0, 119, 181, 0.3)',
+            fontSize: 11,
+            color: '#0077b5',
+            fontWeight: 600,
+          }}>
+            ⟳ {person.linkedin_interactions}
+          </span>
+        )}
+        {person.sources.slice(0, 3).map(s => (
+          <SourcePill key={s} source={s} />
         ))}
+        {person.sources.length > 3 && (
+          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>+{person.sources.length - 3}</span>
+        )}
       </div>
 
-      {/* Expanded content */}
+      {/* Expanded section */}
       {expanded && (
-        <div style={{ marginTop: 10, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-          {person.notes && (
-            <div style={{
-              fontSize: 12,
-              color: 'var(--text-secondary)',
-              lineHeight: 1.5,
-              marginBottom: 12,
-            }}>
-              {person.notes}
+        <div style={{
+          marginTop: 10,
+          borderTop: '1px solid var(--border)',
+          paddingTop: 10,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6,
+        }}>
+          {person.linkedin_url && (
+            <a
+              href={person.linkedin_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              style={{ fontSize: 12, color: '#0077b5', textDecoration: 'none' }}
+            >
+              LinkedIn Profile →
+            </a>
+          )}
+          {person.email && (
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+              ✉ {person.email}
             </div>
           )}
-          <button
-            onClick={handleDelete}
-            style={{
-              background: 'rgba(232, 64, 64, 0.1)',
-              border: '1px solid rgba(232, 64, 64, 0.3)',
-              color: '#e84040',
-              borderRadius: 8,
-              padding: '6px 14px',
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            Remove
-          </button>
+          {person.connected_on && (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              Connected {person.connected_on}
+            </div>
+          )}
+          {(person.has_testimonial || person.has_endorsement) && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {person.has_testimonial && (
+                <span style={{ fontSize: 11, color: '#f5c842', fontWeight: 600 }}>★ Testimonial</span>
+              )}
+              {person.has_endorsement && (
+                <span style={{ fontSize: 11, color: '#4caf50', fontWeight: 600 }}>✓ Endorsement</span>
+              )}
+            </div>
+          )}
+          {person.sources.length > 0 && (
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 2 }}>
+              {person.sources.map(s => <SourcePill key={s} source={s} />)}
+            </div>
+          )}
         </div>
       )}
     </div>
   )
 }
 
-// ─── Add Modal ────────────────────────────────────────────────────────────────
-
-const INPUT_STYLE: React.CSSProperties = {
-  width: '100%',
-  background: 'var(--bg-card)',
-  border: '1px solid var(--border)',
-  borderRadius: 10,
-  padding: '10px 12px',
-  fontSize: 14,
-  color: 'var(--text-primary)',
-  boxSizing: 'border-box',
-  outline: 'none',
-}
-
-function AddModal({
-  onClose,
-  onSave,
-}: {
-  onClose: () => void
-  onSave: (person: Relationship) => void
-}) {
-  const [name, setName] = useState('')
-  const [role, setRole] = useState('')
-  const [company, setCompany] = useState('')
-  const [notes, setNotes] = useState('')
-  const [warmth, setWarmth] = useState(3)
-  const [lastContact, setLastContact] = useState('')
-  const [tags, setTags] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-
-  async function handleSave() {
-    if (!name.trim()) { setError('Name is required'); return }
-    setSaving(true)
-    setError('')
-    try {
-      const res = await fetch('/api/brain/relationships', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: name.trim(),
-          role: role.trim() || undefined,
-          company: company.trim() || undefined,
-          notes: notes.trim() || undefined,
-          warmth,
-          last_contact: lastContact || undefined,
-          tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : [],
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) { setError(data.error || 'Save failed'); return }
-      onSave(data.item)
-      onClose()
-    } catch {
-      setError('Failed to save')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <>
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200 }}
-      />
-      {/* Bottom sheet */}
-      <div style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        background: 'var(--bg-elevated)',
-        borderRadius: '20px 20px 0 0',
-        padding: '20px 20px 40px',
-        zIndex: 201,
-        maxHeight: '92dvh',
-        overflowY: 'auto',
-      }}>
-        {/* Drag handle */}
-        <div style={{
-          width: 36,
-          height: 4,
-          borderRadius: 2,
-          background: 'var(--border-bright)',
-          margin: '0 auto 20px',
-        }} />
-
-        <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 20, letterSpacing: '-0.02em' }}>
-          Add to Network
-        </div>
-
-        {/* Name */}
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-            Name *
-          </div>
-          <input
-            style={INPUT_STYLE}
-            placeholder="Full name"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            autoFocus
-          />
-        </div>
-
-        {/* Role */}
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-            Role
-          </div>
-          <input
-            style={INPUT_STYLE}
-            placeholder="Product Manager, Researcher…"
-            value={role}
-            onChange={e => setRole(e.target.value)}
-          />
-        </div>
-
-        {/* Company */}
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-            Company / Org
-          </div>
-          <input
-            style={INPUT_STYLE}
-            placeholder="Acme Corp, EBFC…"
-            value={company}
-            onChange={e => setCompany(e.target.value)}
-          />
-        </div>
-
-        {/* Warmth */}
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-            Warmth
-          </div>
-          <WarmthPicker value={warmth} onChange={setWarmth} />
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
-            {WARMTH_LABELS[warmth - 1]} ({warmth}/5)
-          </div>
-        </div>
-
-        {/* Last Contact */}
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-            Last Contact
-          </div>
-          <input
-            type="date"
-            style={INPUT_STYLE}
-            value={lastContact}
-            onChange={e => setLastContact(e.target.value)}
-          />
-        </div>
-
-        {/* Tags */}
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-            Tags (comma-separated)
-          </div>
-          <input
-            style={INPUT_STYLE}
-            placeholder="boldt, ebfc, mentor…"
-            value={tags}
-            onChange={e => setTags(e.target.value)}
-          />
-        </div>
-
-        {/* Notes */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-            Notes
-          </div>
-          <textarea
-            style={{ ...INPUT_STYLE, minHeight: 72, resize: 'vertical' }}
-            placeholder="How you met, what to follow up on…"
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-          />
-        </div>
-
-        {error && (
-          <div style={{ color: '#e84040', fontSize: 12, marginBottom: 12, fontWeight: 600 }}>
-            {error}
-          </div>
-        )}
-
-        <button
-          onClick={handleSave}
-          disabled={saving || !name.trim()}
-          style={{
-            width: '100%',
-            background: saving || !name.trim() ? 'var(--bg-card)' : '#9b59b6',
-            border: 'none',
-            borderRadius: 12,
-            padding: '14px',
-            fontSize: 15,
-            fontWeight: 800,
-            color: saving || !name.trim() ? 'var(--text-muted)' : '#fff',
-            cursor: saving || !name.trim() ? 'not-allowed' : 'pointer',
-            transition: 'all 0.15s',
-          }}
-        >
-          {saving ? 'Saving…' : 'Add to Network'}
-        </button>
-      </div>
-    </>
-  )
-}
-
 // ─── Main Page ────────────────────────────────────────────────────────────────
-
-type WarmthFilter = 'All' | 1 | 2 | 3 | 4 | 5
 
 export default function RelationshipsPage() {
   const [people, setPeople] = useState<Relationship[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [warmthFilter, setWarmthFilter] = useState<WarmthFilter>('All')
-  const [showAdd, setShowAdd] = useState(false)
+  const [sourceFilter, setSourceFilter] = useState<SourceFilterKey>('All')
+  const [companyFilter, setCompanyFilter] = useState('All')
+  const [sortKey, setSortKey] = useState<SortKey>('warmth')
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
 
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch('/api/brain/relationships?limit=500')
+        const res = await fetch('/api/brain/relationships')
+        if (!res.ok) throw new Error(`API error: ${res.status}`)
         const data = await res.json()
         setPeople(data.items || [])
       } catch (err) {
         console.error('[RelationshipsPage] load failed:', err)
+        setError(err instanceof Error ? err.message : 'Failed to load')
       } finally {
         setLoading(false)
       }
@@ -443,121 +262,188 @@ export default function RelationshipsPage() {
     load()
   }, [])
 
-  const filtered = useMemo(() => {
-    return people.filter(p => {
-      const matchWarmth = warmthFilter === 'All' || p.warmth === warmthFilter
-      const q = search.toLowerCase()
-      const matchSearch = !q ||
-        p.name.toLowerCase().includes(q) ||
-        (p.role || '').toLowerCase().includes(q) ||
-        (p.company || '').toLowerCase().includes(q) ||
-        (p.tags || []).some(t => t.toLowerCase().includes(q))
-      return matchWarmth && matchSearch
+  // Reset visible count when filters/sort change
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE)
+  }, [search, warmthFilter, sourceFilter, companyFilter, sortKey])
+
+  const topCompanies = useMemo(() => {
+    const counts: Record<string, number> = {}
+    people.forEach(p => {
+      if (p.company) counts[p.company] = (counts[p.company] || 0) + 1
     })
-  }, [people, warmthFilter, search])
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 20)
+      .map(([company]) => company)
+  }, [people])
 
-  const avg = useMemo(() => avgWarmth(people), [people])
-
-  // Counts per warmth level
   const warmthCounts = useMemo(() => {
     const counts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
     people.forEach(p => { if (p.warmth) counts[p.warmth] = (counts[p.warmth] || 0) + 1 })
     return counts
   }, [people])
 
-  const handleDelete = useCallback((id: string) => {
-    setPeople(prev => prev.filter(p => p.id !== id))
-  }, [])
+  const sourceCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    Object.keys(SOURCE_FILTER_GROUPS).forEach(group => {
+      const groupSources = SOURCE_FILTER_GROUPS[group]
+      counts[group] = people.filter(p => p.sources.some(s => groupSources.includes(s))).length
+    })
+    return counts
+  }, [people])
 
-  const handleAdd = useCallback((person: Relationship) => {
-    setPeople(prev => [person, ...prev])
-  }, [])
+  const filtered = useMemo(() => {
+    let result = people
+
+    if (search) {
+      const q = search.toLowerCase()
+      result = result.filter(r =>
+        r.name.toLowerCase().includes(q) ||
+        (r.position || '').toLowerCase().includes(q) ||
+        (r.company || '').toLowerCase().includes(q)
+      )
+    }
+
+    if (warmthFilter !== 'All') {
+      result = result.filter(r => r.warmth === warmthFilter)
+    }
+
+    if (sourceFilter !== 'All') {
+      const groupSources = SOURCE_FILTER_GROUPS[sourceFilter]
+      result = result.filter(r => r.sources.some(s => groupSources.includes(s)))
+    }
+
+    if (companyFilter !== 'All') {
+      result = result.filter(r => r.company === companyFilter)
+    }
+
+    return [...result].sort((a, b) => {
+      if (sortKey === 'warmth') return (b.warmth || 0) - (a.warmth || 0)
+      if (sortKey === 'name') return a.name.localeCompare(b.name)
+      if (sortKey === 'brain') return b.brain_mentions - a.brain_mentions
+      if (sortKey === 'linkedin') return b.linkedin_interactions - a.linkedin_interactions
+      return 0
+    })
+  }, [people, search, warmthFilter, sourceFilter, companyFilter, sortKey])
+
+  const visible = filtered.slice(0, visibleCount)
+  const hasMore = visibleCount < filtered.length
+
+  const hotCount = warmthCounts[5] || 0
 
   return (
-    <main style={{ background: 'var(--bg-base)', minHeight: '100dvh', paddingBottom: 96 }}>
+    <main style={{ background: 'var(--bg-base)', minHeight: '100dvh', paddingBottom: 32 }}>
       <NavHeader title="Relationships" back />
 
-      {/* ── Stats bar ─────────────────────────────────── */}
+      {/* Stats bar */}
       <div style={{
         display: 'flex',
+        gap: 0,
         borderBottom: '1px solid var(--border)',
+        padding: '12px 16px',
         background: 'var(--bg-surface)',
       }}>
-        {/* Total */}
-        <div style={{ flex: 1, textAlign: 'center', padding: '12px 8px' }}>
+        <div style={{ flex: 1, textAlign: 'center' }}>
           <div style={{ fontSize: 24, fontWeight: 800, color: '#9b59b6', letterSpacing: '-0.04em' }}>
-            {people.length}
+            {loading ? '—' : people.length.toLocaleString()}
           </div>
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
-            Total
-          </div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Contacts</div>
         </div>
-
         <div style={{ width: 1, background: 'var(--border)' }} />
-
-        {/* Avg warmth */}
-        <div style={{ flex: 1, textAlign: 'center', padding: '12px 8px' }}>
-          <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.04em', color: avg ? WARMTH_COLORS[Math.round(avg) - 1] : 'var(--text-muted)' }}>
-            {avg ? avg.toFixed(1) : '—'}
+        <div style={{ flex: 1, textAlign: 'center' }}>
+          <div style={{ fontSize: 24, fontWeight: 800, color: '#00b8a9', letterSpacing: '-0.04em' }}>
+            {loading ? '—' : hotCount}
           </div>
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
-            Avg warmth
-          </div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Hot</div>
         </div>
-
         <div style={{ width: 1, background: 'var(--border)' }} />
-
-        {/* Warmth breakdown: 5 colored circles */}
-        <div style={{ flex: 2, padding: '12px 10px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            {[1, 2, 3, 4, 5].map(w => (
-              <div
-                key={w}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 2,
-                }}
-              >
-                <div style={{
-                  width: 22,
-                  height: 22,
-                  borderRadius: '50%',
-                  background: warmthCounts[w] > 0 ? `${WARMTH_COLORS[w - 1]}33` : 'var(--bg-card)',
-                  border: `2px solid ${warmthCounts[w] > 0 ? WARMTH_COLORS[w - 1] : 'var(--border)'}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 10,
-                  fontWeight: 800,
-                  color: warmthCounts[w] > 0 ? WARMTH_COLORS[w - 1] : 'var(--text-muted)',
-                }}>
-                  {warmthCounts[w] || 0}
-                </div>
-                <div style={{ fontSize: 8, color: 'var(--text-muted)', fontWeight: 600 }}>★{w}</div>
-              </div>
-            ))}
+        <div style={{ flex: 1, textAlign: 'center' }}>
+          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--accent-teal)', letterSpacing: '-0.04em' }}>
+            {loading ? '—' : topCompanies.length}
           </div>
-          <div style={{ fontSize: 9, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            By warmth
-          </div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Companies</div>
         </div>
       </div>
 
-      {/* ── Search ────────────────────────────────────── */}
-      <div style={{ padding: '16px 16px 8px' }}>
+      {/* Search */}
+      <div style={{ padding: '16px 16px 8px', position: 'relative' }}>
         <input
           className="search-input"
           type="search"
-          placeholder="Search name, role, company, tags…"
+          placeholder="Search name, position, company…"
           value={search}
           onChange={e => setSearch(e.target.value)}
+          style={{ paddingRight: search ? 36 : undefined }}
         />
+        {search && (
+          <button
+            onClick={() => setSearch('')}
+            style={{
+              position: 'absolute',
+              right: 28,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--text-muted)',
+              fontSize: 16,
+              lineHeight: 1,
+              padding: '0 4px',
+            }}
+          >
+            ×
+          </button>
+        )}
       </div>
 
-      {/* ── Warmth filter chips ────────────────────────── */}
-      <div style={{ display: 'flex', gap: 8, padding: '8px 16px 16px', overflowX: 'auto' }} className="no-scrollbar">
+      {/* Sort + Company row */}
+      <div style={{ display: 'flex', gap: 8, padding: '0 16px 8px', alignItems: 'center' }}>
+        <select
+          value={sortKey}
+          onChange={e => setSortKey(e.target.value as SortKey)}
+          style={{
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            padding: '6px 10px',
+            fontSize: 12,
+            color: 'var(--text-secondary)',
+            cursor: 'pointer',
+            outline: 'none',
+          }}
+        >
+          <option value="warmth">Sort: Warmth</option>
+          <option value="name">Sort: Name</option>
+          <option value="brain">Sort: Brain</option>
+          <option value="linkedin">Sort: LinkedIn</option>
+        </select>
+        <select
+          value={companyFilter}
+          onChange={e => setCompanyFilter(e.target.value)}
+          style={{
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            padding: '6px 10px',
+            fontSize: 12,
+            color: companyFilter !== 'All' ? 'var(--text-primary)' : 'var(--text-secondary)',
+            cursor: 'pointer',
+            outline: 'none',
+            flex: 1,
+            maxWidth: 200,
+          }}
+        >
+          <option value="All">All Companies</option>
+          {topCompanies.map(c => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Warmth filter chips */}
+      <div style={{ display: 'flex', gap: 8, padding: '0 16px 8px', overflowX: 'auto' }} className="no-scrollbar">
         {(['All', 5, 4, 3, 2, 1] as const).map(w => (
           <button
             key={w}
@@ -569,7 +455,7 @@ export default function RelationshipsPage() {
               background: `${WARMTH_COLORS[(w as number) - 1]}18`,
             } : {}}
           >
-            {w === 'All' ? 'All' : `★${w}`}
+            {w === 'All' ? 'All' : WARMTH_LABELS[(w as number) - 1]}
             {w !== 'All' && warmthCounts[w as number] > 0 && (
               <span style={{ marginLeft: 4, opacity: 0.7 }}>·{warmthCounts[w as number]}</span>
             )}
@@ -577,68 +463,71 @@ export default function RelationshipsPage() {
         ))}
       </div>
 
-      {/* ── Results count ─────────────────────────────── */}
-      <div style={{ padding: '0 16px 8px', fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>
-        {filtered.length} {filtered.length === 1 ? 'contact' : 'contacts'}
-        {search || warmthFilter !== 'All' ? ` · filtered` : ''}
+      {/* Source filter chips */}
+      <div style={{ display: 'flex', gap: 8, padding: '0 16px 12px', overflowX: 'auto' }} className="no-scrollbar">
+        {(['All', 'LinkedIn', 'Brain', 'Testimonial', 'Endorsement'] as const).map(s => (
+          <button
+            key={s}
+            className={`filter-chip ${sourceFilter === s ? 'active' : ''}`}
+            onClick={() => setSourceFilter(s)}
+          >
+            {s}
+            {s !== 'All' && sourceCounts[s] > 0 && (
+              <span style={{ marginLeft: 4, opacity: 0.7 }}>·{sourceCounts[s]}</span>
+            )}
+          </button>
+        ))}
       </div>
 
-      {/* ── List ──────────────────────────────────────── */}
+      {/* Results count */}
+      <div style={{
+        padding: '0 16px 12px',
+        fontSize: 12,
+        color: 'var(--text-muted)',
+        fontWeight: 600,
+      }}>
+        <span style={{ color: '#9b59b6', fontWeight: 800 }}>{filtered.length.toLocaleString()}</span> contacts
+        {filtered.length !== people.length && ` · filtered from ${people.length.toLocaleString()}`}
+      </div>
+
+      {/* Cards list */}
       <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {loading ? (
-          <LoadingSkeleton count={5} height={100} />
+          <LoadingSkeleton count={6} height={80} />
+        ) : error ? (
+          <div style={{ color: '#e84040', fontSize: 14, padding: '20px 0', textAlign: 'center' }}>
+            Failed to load: {error}
+          </div>
         ) : filtered.length === 0 ? (
-          <div style={{
-            color: 'var(--text-muted)',
-            fontSize: 14,
-            padding: '32px 0',
-            textAlign: 'center',
-            lineHeight: 1.6,
-          }}>
-            {people.length === 0
-              ? 'No contacts yet.\nTap + to add your first relationship.'
-              : 'No contacts match this filter.'}
+          <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '32px 0', textAlign: 'center' }}>
+            No contacts match your filters.
           </div>
         ) : (
-          filtered.map(p => (
-            <RelationshipCard key={p.id} person={p} onDelete={handleDelete} />
-          ))
+          <>
+            {visible.map(person => (
+              <RelationshipCard key={person.id} person={person} />
+            ))}
+            {hasMore && (
+              <button
+                onClick={() => setVisibleCount(v => v + PAGE_SIZE)}
+                style={{
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 12,
+                  padding: '12px',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  marginTop: 4,
+                }}
+              >
+                Load more ({(filtered.length - visibleCount).toLocaleString()} remaining)
+              </button>
+            )}
+          </>
         )}
       </div>
-
-      {/* ── FAB ───────────────────────────────────────── */}
-      <button
-        onClick={() => setShowAdd(true)}
-        style={{
-          position: 'fixed',
-          bottom: 28,
-          right: 20,
-          width: 52,
-          height: 52,
-          borderRadius: '50%',
-          background: '#9b59b6',
-          border: 'none',
-          boxShadow: '0 4px 20px rgba(155, 89, 182, 0.5)',
-          fontSize: 24,
-          color: '#fff',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 100,
-        }}
-        aria-label="Add relationship"
-      >
-        +
-      </button>
-
-      {/* ── Add modal ─────────────────────────────────── */}
-      {showAdd && (
-        <AddModal
-          onClose={() => setShowAdd(false)}
-          onSave={handleAdd}
-        />
-      )}
     </main>
   )
 }
