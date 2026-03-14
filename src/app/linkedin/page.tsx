@@ -38,6 +38,40 @@ const TYPE_FILTERS: { key: TypeFilter; label: string }[] = [
   { key: 'positions', label: 'Positions' },
 ]
 
+const MONTH_MAP: Record<string, number> = {
+  Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
+  Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
+}
+
+function getRealDate(item: LinkedInItem): Date {
+  const rawType = item.thought_type?.replace('linkedin_', '') || ''
+
+  if (rawType === 'connection' && item.metadata?.connected_on) {
+    // Format: '26 Oct 2025'
+    const parts = String(item.metadata.connected_on).trim().split(' ')
+    if (parts.length === 3) {
+      const day = parseInt(parts[0], 10)
+      const month = MONTH_MAP[parts[1]]
+      const year = parseInt(parts[2], 10)
+      if (!isNaN(day) && month !== undefined && !isNaN(year)) {
+        return new Date(year, month, day)
+      }
+    }
+  }
+
+  if ((rawType === 'post' || rawType === 'comment') && item.metadata?.date) {
+    // Format: '2026-01-26 05:27:08'
+    const d = new Date(String(item.metadata.date).replace(' ', 'T'))
+    if (!isNaN(d.getTime())) return d
+  }
+
+  return new Date(item.created_at)
+}
+
+function formatItemDate(item: LinkedInItem): string {
+  return getRealDate(item).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 function LinkedInCard({ item }: { item: LinkedInItem }) {
   const [expanded, setExpanded] = useState(false)
   const rawType = item.thought_type?.replace('linkedin_', '') || 'item'
@@ -168,7 +202,7 @@ function LinkedInCard({ item }: { item: LinkedInItem }) {
           </span>
         ))}
         <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>
-          {new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+          {formatItemDate(item)}
         </span>
       </div>
     </div>
@@ -240,9 +274,9 @@ export default function LinkedInPage() {
     }
 
     if (sort === 'Newest') {
-      result = result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      result = result.sort((a, b) => getRealDate(b).getTime() - getRealDate(a).getTime())
     } else if (sort === 'Oldest') {
-      result = result.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      result = result.sort((a, b) => getRealDate(a).getTime() - getRealDate(b).getTime())
     } else if (sort === 'Type') {
       result = result.sort((a, b) => (a.thought_type || '').localeCompare(b.thought_type || ''))
     }
