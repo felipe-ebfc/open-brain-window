@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { NavHeader } from '@/components/NavHeader'
 import { LoadingSkeleton } from '@/components/LoadingSkeleton'
 
@@ -15,6 +15,7 @@ type LinkedInItem = {
   created_at: string
   parent_post_preview?: string
   parent_url?: string
+  similarity?: number
 }
 
 type Counts = {
@@ -27,7 +28,7 @@ type Counts = {
 
 type TypeFilter = 'all' | 'posts' | 'connections' | 'comments' | 'endorsements' | 'positions'
 type SortOption = 'Newest' | 'Oldest' | 'Type'
-type SearchMode = 'text' | 'tags'
+type SearchMode = 'text' | 'tags' | 'semantic'
 
 const SORT_OPTIONS: SortOption[] = ['Newest', 'Oldest', 'Type']
 
@@ -43,6 +44,12 @@ const TYPE_FILTERS: { key: TypeFilter; label: string }[] = [
 const MONTH_MAP: Record<string, number> = {
   Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
   Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
+}
+
+// Full month names for "September 2025" style position dates
+const MONTH_FULL_MAP: Record<string, number> = {
+  January: 0, February: 1, March: 2, April: 3, May: 4, June: 5,
+  July: 6, August: 7, September: 8, October: 9, November: 10, December: 11,
 }
 
 function getRealDate(item: LinkedInItem): Date {
@@ -61,10 +68,36 @@ function getRealDate(item: LinkedInItem): Date {
     }
   }
 
+  // Endorsements: format '2022/08/29 06:35:06 UTC'
+  if (rawType === 'endorsement' && item.metadata?.date) {
+    const dateStr = String(item.metadata.date).replace(' UTC', '').replace(/\//g, '-').replace(' ', 'T')
+    const d = new Date(dateStr)
+    if (!isNaN(d.getTime())) return d
+  }
+
+  // Posts and comments: format '2026-01-26 05:27:08'
   if ((rawType === 'post' || rawType === 'comment') && item.metadata?.date) {
-    // Format: '2026-01-26 05:27:08'
     const d = new Date(String(item.metadata.date).replace(' ', 'T'))
     if (!isNaN(d.getTime())) return d
+  }
+
+  // Positions: format 'Sep 2025' in metadata.started
+  if (rawType === 'position' && item.metadata?.started) {
+    const started = String(item.metadata.started).trim()
+    // Try "Mon YYYY" format
+    const parts = started.split(' ')
+    if (parts.length === 2) {
+      const month = MONTH_MAP[parts[0]] ?? MONTH_FULL_MAP[parts[0]]
+      const year = parseInt(parts[1], 10)
+      if (month !== undefined && !isNaN(year)) {
+        return new Date(year, month, 1)
+      }
+    }
+    // Try just "YYYY"
+    const yearOnly = parseInt(started, 10)
+    if (!isNaN(yearOnly) && yearOnly > 1900 && yearOnly < 2100) {
+      return new Date(yearOnly, 0, 1)
+    }
   }
 
   return new Date(item.created_at)
@@ -110,13 +143,21 @@ function LinkedInCard({ item }: { item: LinkedInItem }) {
 
     if (rawType === 'endorsement') {
       const skill = item.content.split('\n')[0] || item.content.slice(0, 60)
+      const endorser = item.metadata?.endorser || null
       const count = item.metadata?.endorsement_count || item.metadata?.count || null
       return (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 14, flexShrink: 0 }}>⭐</span>
-          <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {skill}
-          </span>
+          <span style={{ fontSize: 14, flexShrink: 0 }}>&#11088;</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+              {skill}
+            </span>
+            {endorser && (
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)', display: 'block', marginTop: 1 }}>
+                by {endorser}
+              </span>
+            )}
+          </div>
           {count != null && (
             <span style={{
               background: 'rgba(0,119,181,0.15)', border: '1px solid rgba(0,119,181,0.3)',
@@ -171,7 +212,7 @@ function LinkedInCard({ item }: { item: LinkedInItem }) {
                 Replying to your post:
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic', lineHeight: 1.4 }}>
-                {item.parent_post_preview}{item.parent_post_preview.length === 150 ? '…' : ''}
+                {item.parent_post_preview}{item.parent_post_preview.length === 150 ? '\u2026' : ''}
               </div>
             </div>
           )}
@@ -247,6 +288,19 @@ function LinkedInCard({ item }: { item: LinkedInItem }) {
             #{tag}
           </span>
         ))}
+        {item.similarity != null && (
+          <span style={{
+            background: 'rgba(52, 199, 89, 0.15)',
+            border: '1px solid rgba(52, 199, 89, 0.3)',
+            color: '#34c759',
+            padding: '2px 8px',
+            borderRadius: 9999,
+            fontSize: 11,
+            fontWeight: 700,
+          }}>
+            {Math.round(item.similarity * 100)}% match
+          </span>
+        )}
         <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>
           {formatItemDate(item)}
         </span>
@@ -255,20 +309,32 @@ function LinkedInCard({ item }: { item: LinkedInItem }) {
   )
 }
 
+const SEARCH_MODE_CYCLE: SearchMode[] = ['text', 'tags', 'semantic']
+const SEARCH_MODE_LABELS: Record<SearchMode, string> = {
+  text: '\ud83d\udd24 Text',
+  tags: '\ud83c\udff7\ufe0f Tags',
+  semantic: '\ud83e\udde0 AI',
+}
+
 export default function LinkedInPage() {
-  const [selectedType, setSelectedType] = useState<TypeFilter>('posts')
+  const [selectedType, setSelectedType] = useState<TypeFilter>('all')
   const [items, setItems] = useState<LinkedInItem[]>([])
   const [counts, setCounts] = useState<Counts | null>(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [searchMode, setSearchMode] = useState<SearchMode>('text')
+  const [semanticResults, setSemanticResults] = useState<LinkedInItem[] | null>(null)
+  const [semanticLoading, setSemanticLoading] = useState(false)
   const [sort, setSort] = useState<SortOption>('Newest')
+  const searchRef = useRef<HTMLInputElement>(null)
 
-  const loadType = useCallback(async (type: Exclude<TypeFilter, 'all'>) => {
+  const loadType = useCallback(async (type: TypeFilter) => {
     setLoading(true)
     try {
-      const limit = type === 'connections' ? 200 : 100
-      const res = await fetch(`/api/brain/linkedin?type=${type}&limit=${limit}`)
+      const endpoint = type === 'all'
+        ? '/api/brain/linkedin?type=all&limit=5000'
+        : `/api/brain/linkedin?type=${type}&limit=5000`
+      const res = await fetch(endpoint)
       if (!res.ok) throw new Error(`API error: ${res.status}`)
       const data = await res.json()
       setItems(data.items || [])
@@ -282,17 +348,53 @@ export default function LinkedInPage() {
   }, [])
 
   useEffect(() => {
-    loadType('posts')
+    loadType('all')
   }, [loadType])
+
+  // Semantic search with debounce
+  useEffect(() => {
+    if (searchMode !== 'semantic' || !search.trim()) {
+      setSemanticResults(null)
+      return
+    }
+
+    const timer = setTimeout(async () => {
+      setSemanticLoading(true)
+      try {
+        const res = await fetch(`/api/brain/search?q=${encodeURIComponent(search)}&limit=50`)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const { thoughts: data } = await res.json()
+        // Map thoughts response to LinkedInItem shape, filter to linkedin types only
+        const linkedInResults = (data || [])
+          .filter((t: any) => t.category?.startsWith('linkedin') || t.thought_type?.startsWith('linkedin'))
+          .map((t: any) => ({
+            id: t.id,
+            content: t.content,
+            thought_type: t.category || t.thought_type || '',
+            tags: t.tags || [],
+            metadata: t.metadata || null,
+            created_at: t.created_at,
+            similarity: t.similarity,
+          }))
+        setSemanticResults(linkedInResults)
+      } catch (err) {
+        console.error('Semantic search failed:', err)
+        setSemanticResults([])
+      } finally {
+        setSemanticLoading(false)
+      }
+    }, 600)
+
+    return () => clearTimeout(timer)
+  }, [search, searchMode])
 
   const handleTypeChange = (type: TypeFilter) => {
     if (type === selectedType) return
     setSelectedType(type)
     setSearch('')
-    if (type !== 'all') {
-      setItems([])
-      loadType(type)
-    }
+    setSemanticResults(null)
+    setItems([])
+    loadType(type)
   }
 
   const total = counts
@@ -306,13 +408,23 @@ export default function LinkedInPage() {
   }
 
   const filtered = useMemo(() => {
+    // If semantic search returned results, use those (already ranked by similarity)
+    if (searchMode === 'semantic' && semanticResults !== null) {
+      let result = semanticResults
+      if (selectedType !== 'all') {
+        const dbType = `linkedin-${selectedType.replace(/s$/, '')}`
+        result = result.filter(item => item.thought_type === dbType)
+      }
+      return result
+    }
+
     let result = [...items]
 
     if (search) {
       const q = search.toLowerCase()
       if (searchMode === 'text') {
         result = result.filter(item => item.content.toLowerCase().includes(q))
-      } else {
+      } else if (searchMode === 'tags') {
         result = result.filter(item =>
           item.tags?.some(tag => tag.toLowerCase().includes(q))
         )
@@ -328,7 +440,7 @@ export default function LinkedInPage() {
     }
 
     return result
-  }, [items, search, searchMode, sort])
+  }, [items, search, searchMode, sort, selectedType, semanticResults])
 
   const grouped = useMemo(() => {
     if (sort !== 'Type') return null
@@ -340,6 +452,19 @@ export default function LinkedInPage() {
     })
     return groups
   }, [filtered, sort])
+
+  const cycleSearchMode = () => {
+    setSearchMode(m => {
+      const idx = SEARCH_MODE_CYCLE.indexOf(m)
+      return SEARCH_MODE_CYCLE[(idx + 1) % SEARCH_MODE_CYCLE.length]
+    })
+  }
+
+  const clearSearch = () => {
+    setSearch('')
+    setSemanticResults(null)
+    searchRef.current?.focus()
+  }
 
   return (
     <main style={{ background: 'var(--bg-base)', minHeight: '100dvh', paddingBottom: 32 }}>
@@ -355,7 +480,7 @@ export default function LinkedInPage() {
       }}>
         <div style={{ flex: 1, textAlign: 'center' }}>
           <div style={{ fontSize: 24, fontWeight: 800, color: '#0077b5', letterSpacing: '-0.04em' }}>
-            {total !== null ? total.toLocaleString() : '—'}
+            {total !== null ? total.toLocaleString() : '\u2014'}
           </div>
           <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Total</div>
         </div>
@@ -367,7 +492,7 @@ export default function LinkedInPage() {
         <div style={{ width: 1, background: 'var(--border)' }} />
         <div style={{ flex: 1, textAlign: 'center' }}>
           <div style={{ fontSize: 24, fontWeight: 800, color: '#0077b5', letterSpacing: '-0.04em' }}>
-            {loading ? '—' : filtered.length}
+            {loading ? '\u2014' : filtered.length.toLocaleString()}
           </div>
           <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Showing</div>
         </div>
@@ -375,20 +500,51 @@ export default function LinkedInPage() {
 
       {/* Search */}
       <div style={{ padding: '16px 16px 8px', display: 'flex', gap: 8, alignItems: 'center' }}>
-        <input
-          className="search-input"
-          type="search"
-          placeholder={searchMode === 'tags' ? 'Search by tag…' : 'Search content…'}
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          style={{ flex: 1 }}
-        />
+        <div style={{ flex: 1, position: 'relative' }}>
+          <input
+            ref={searchRef}
+            className="search-input"
+            type="search"
+            placeholder={
+              searchMode === 'semantic' ? 'Semantic search across LinkedIn data\u2026'
+                : searchMode === 'tags' ? 'Search by tag\u2026'
+                : 'Search content\u2026'
+            }
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{ width: '100%', paddingRight: search ? 32 : undefined }}
+          />
+          {search && (
+            <button
+              onClick={clearSearch}
+              style={{
+                position: 'absolute',
+                right: 8,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-muted)',
+                fontSize: 16,
+                cursor: 'pointer',
+                padding: '4px',
+                lineHeight: 1,
+              }}
+              aria-label="Clear search"
+            >
+              \u2715
+            </button>
+          )}
+        </div>
         <button
-          onClick={() => setSearchMode(m => m === 'text' ? 'tags' : 'text')}
+          onClick={cycleSearchMode}
+          title={`Search mode: ${searchMode}`}
           style={{
-            background: searchMode === 'tags' ? 'rgba(0,119,181,0.2)' : 'var(--bg-elevated)',
-            border: `1px solid ${searchMode === 'tags' ? '#0077b5' : 'var(--border)'}`,
-            color: searchMode === 'tags' ? '#0077b5' : 'var(--text-muted)',
+            background: searchMode === 'semantic' ? 'rgba(74, 158, 255, 0.2)'
+              : searchMode === 'tags' ? 'rgba(0,119,181,0.2)'
+              : 'var(--bg-elevated)',
+            border: `1px solid ${searchMode === 'semantic' ? 'var(--accent-blue)' : searchMode === 'tags' ? '#0077b5' : 'var(--border)'}`,
+            color: searchMode === 'semantic' ? 'var(--accent-blue)' : searchMode === 'tags' ? '#0077b5' : 'var(--text-muted)',
             borderRadius: 10,
             padding: '8px 12px',
             fontSize: 13,
@@ -397,11 +553,18 @@ export default function LinkedInPage() {
             whiteSpace: 'nowrap',
             transition: 'all 0.2s',
             flexShrink: 0,
+            minHeight: 44,
+            minWidth: 44,
           }}
         >
-          {searchMode === 'tags' ? '🏷️ Tags' : '🔤 Text'}
+          {SEARCH_MODE_LABELS[searchMode]}
         </button>
       </div>
+      {searchMode === 'semantic' && semanticLoading && (
+        <div style={{ padding: '0 16px', fontSize: 12, color: 'var(--accent-blue)', fontWeight: 600 }}>
+          Searching with AI\u2026
+        </div>
+      )}
 
       {/* Sort chips */}
       <div style={{ display: 'flex', gap: 6, padding: '8px 16px 4px' }}>
@@ -452,7 +615,7 @@ export default function LinkedInPage() {
                 letterSpacing: '0.1em', textTransform: 'uppercase',
                 padding: '12px 0 8px', borderTop: '1px solid var(--border)', marginTop: 4,
               }}>
-                {type} · {typeItems.length}
+                {type} \u00b7 {typeItems.length}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {typeItems.map(item => <LinkedInCard key={item.id} item={item} />)}

@@ -62,7 +62,7 @@ function enrichComments(items: any[], postUrnMap: Map<string, string>): any[] {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const type = searchParams.get('type') || 'posts'
-  const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 500)
+  const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 5000)
   const offset = parseInt(searchParams.get('offset') || '0')
 
   try {
