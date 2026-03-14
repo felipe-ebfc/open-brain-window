@@ -37,6 +37,15 @@ const TILES = [
     href: '/memory',
   },
   {
+    id: 'concepts',
+    label: 'Concepts',
+    icon: '📖',
+    table: 'concepts',
+    color: '#ff9800',
+    desc: 'Deep dives & mental models',
+    href: '/concepts',
+  },
+  {
     id: 'testimonials',
     label: 'RSM Testimonials',
     icon: '⭐',
