@@ -98,16 +98,15 @@ function FYPCard({ item }: { item: FYPItem }) {
       style={{
         borderRadius: 16,
         padding: 16,
-        width: '100%',
-        minHeight: 200,
+        minWidth: '85vw',
+        maxWidth: '85vw',
         cursor: 'pointer',
         borderLeft: `4px solid ${accentColor}`,
         boxSizing: 'border-box',
-        scrollSnapAlign: 'start',
+        scrollSnapAlign: 'center',
         flexShrink: 0,
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'center',
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
@@ -168,9 +167,9 @@ function FYPCard({ item }: { item: FYPItem }) {
 
 function FeedSkeleton() {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '4px 16px' }}>
+    <div style={{ display: 'flex', flexDirection: 'row', gap: 12, padding: '4px 16px', overflowX: 'hidden' }}>
       {[1, 2].map((i) => (
-        <div key={i} className="skeleton" style={{ width: '100%', height: 200, borderRadius: 16 }} />
+        <div key={i} className="skeleton" style={{ minWidth: '85vw', height: 120, borderRadius: 16, flexShrink: 0 }} />
       ))}
     </div>
   )
@@ -206,6 +205,17 @@ function TileCard({ tile, count }: { tile: typeof TILES[0]; count: number | null
           opacity: 0.08,
           pointerEvents: 'none',
         }} />
+
+        {/* Tap affordance */}
+        <div style={{
+          position: 'absolute',
+          bottom: 10,
+          right: 12,
+          fontSize: 14,
+          color: 'var(--text-muted)',
+          opacity: 0.5,
+          lineHeight: 1,
+        }}>›</div>
 
         <div style={{ fontSize: 22 }}>{tile.icon}</div>
 
@@ -305,7 +315,7 @@ export default function Home() {
       <NavHeader />
 
       {/* ── FOR YOU FEED ─────────────────────────────── */}
-      <section style={{ paddingTop: 20 }}>
+      <section style={{ paddingTop: 20, marginBottom: 20 }}>
         <div style={{
           padding: '0 16px 10px',
           display: 'flex',
@@ -346,12 +356,12 @@ export default function Home() {
             className="no-scrollbar"
             style={{
               display: 'flex',
-              flexDirection: 'column',
+              flexDirection: 'row',
               gap: 12,
-              overflowY: 'auto',
-              scrollSnapType: 'y mandatory',
-              height: 300,
+              overflowX: 'auto',
+              scrollSnapType: 'x mandatory',
               padding: '4px 16px 16px',
+              WebkitOverflowScrolling: 'touch',
             }}
           >
             {fypItems.map(item => (
