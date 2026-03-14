@@ -4,7 +4,6 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { FeedItem } from '@/lib/supabase'
 import { NavHeader } from '@/components/NavHeader'
 
 // ─── Tile definitions (extend as tables are added) ───────────────────────────
@@ -65,9 +64,32 @@ const SOURCE_COLORS: Record<string, string> = {
   general: 'var(--border-bright)',
 }
 
-function FeedCard({ item }: { item: FeedItem }) {
+type FYPItem = {
+  id: string
+  title: string
+  body: string
+  category: string
+  tags: string[]
+  date: string
+  created_at: string
+  section: 'recent' | 'resurfaced'
+}
+
+// Category color map
+const CATEGORY_COLORS: Record<string, string> = {
+  concept: '#ff9800',
+  memory: '#e91e63',
+  general: 'var(--accent-blue)',
+  journal: 'var(--accent-teal)',
+  'daily-note': 'var(--accent-teal)',
+  milestone: 'var(--accent-gold)',
+  identity: '#9b59b6',
+  decision: '#4caf50',
+}
+
+function FYPCard({ item }: { item: FYPItem }) {
   const [expanded, setExpanded] = useState(false)
-  const accentColor = SOURCE_COLORS[item.source] || SOURCE_COLORS.general
+  const accentColor = CATEGORY_COLORS[item.category] || 'var(--border-bright)'
 
   return (
     <div
@@ -80,17 +102,31 @@ function FeedCard({ item }: { item: FeedItem }) {
         maxWidth: 320,
         cursor: 'pointer',
         borderLeft: `4px solid ${accentColor}`,
+        flexShrink: 0,
       }}
     >
-      <div style={{
-        fontSize: 10,
-        fontWeight: 700,
-        letterSpacing: '0.1em',
-        textTransform: 'uppercase',
-        color: accentColor,
-        marginBottom: 6,
-      }}>
-        {item.source}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+        <div style={{
+          fontSize: 10,
+          fontWeight: 700,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          color: accentColor,
+        }}>
+          {item.category}
+        </div>
+        {item.section === 'resurfaced' && (
+          <span style={{
+            fontSize: 9,
+            fontWeight: 700,
+            color: 'var(--accent-gold)',
+            background: 'rgba(245, 166, 35, 0.15)',
+            padding: '1px 6px',
+            borderRadius: 9999,
+          }}>
+            ✨ resurfaced
+          </span>
+        )}
       </div>
       <div style={{
         fontSize: 15,
@@ -98,27 +134,20 @@ function FeedCard({ item }: { item: FeedItem }) {
         color: 'var(--text-primary)',
         lineHeight: 1.3,
         marginBottom: expanded ? 10 : 0,
+        display: expanded ? 'block' : '-webkit-box',
+        WebkitLineClamp: expanded ? 'unset' : 2,
+        WebkitBoxOrient: 'vertical' as const,
+        overflow: expanded ? 'visible' : 'hidden',
       }}>
         {item.title}
       </div>
-      {expanded && (
+      {expanded && item.body && (
         <div style={{
           fontSize: 13,
           color: 'var(--text-secondary)',
           lineHeight: 1.5,
         }}>
           {item.body}
-          {item.link && (
-            <a
-              href={item.link}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={e => e.stopPropagation()}
-              style={{ color: accentColor, display: 'block', marginTop: 8, fontSize: 12, fontWeight: 600 }}
-            >
-              View →
-            </a>
-          )}
         </div>
       )}
       <div style={{
@@ -223,15 +252,26 @@ function TileCard({ tile, count }: { tile: typeof TILES[0]; count: number | null
 }
 
 export default function Home() {
-  const [feedItems, setFeedItems] = useState<FeedItem[]>([])
+  const [fypItems, setFypItems] = useState<FYPItem[]>([])
   const [feedLoading, setFeedLoading] = useState(true)
   const [tileCounts, setTileCounts] = useState<Record<string, number | null>>(
     Object.fromEntries(TILES.map(t => [t.id, null]))
   )
 
   useEffect(() => {
-    // Feed items — no feed_items table yet, skip gracefully
-    setFeedLoading(false)
+    async function loadFYP() {
+      try {
+        const res = await fetch('/api/brain/fyp?limit=15')
+        if (!res.ok) throw new Error(`FYP error: ${res.status}`)
+        const data = await res.json()
+        setFypItems(data.items || [])
+      } catch (err) {
+        console.error('FYP load failed:', err)
+      } finally {
+        setFeedLoading(false)
+      }
+    }
+    loadFYP()
 
     // Load tile counts via server-side API (bypasses RLS)
     async function loadCounts() {
@@ -288,13 +328,13 @@ export default function Home() {
 
         {feedLoading ? (
           <FeedSkeleton />
-        ) : feedItems.length === 0 ? (
+        ) : fypItems.length === 0 ? (
           <div style={{
             padding: '12px 16px 20px',
             color: 'var(--text-muted)',
             fontSize: 13,
           }}>
-            No feed items yet. Ask Osito to surface insights.
+            Your brain is warming up…
           </div>
         ) : (
           <div
@@ -306,8 +346,8 @@ export default function Home() {
               padding: '4px 16px 16px',
             }}
           >
-            {feedItems.map(item => (
-              <FeedCard key={item.id} item={item} />
+            {fypItems.map(item => (
+              <FYPCard key={item.id} item={item} />
             ))}
           </div>
         )}
