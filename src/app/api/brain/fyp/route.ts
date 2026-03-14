@@ -11,7 +11,8 @@ export const dynamic = 'force-dynamic'
  * - Resurfaced older content (random selection from 7+ days ago)
  * 
  * Ratio: ~60% recent, ~40% resurfaced
- * Excludes atlas papers (they have their own page)
+ * Includes ALL thought types (atlas, concept, memory, testimonial, linkedin-post, etc.)
+ * Both recent and resurfaced arrays are shuffled for a fresh mix every load
  */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -25,23 +26,25 @@ export async function GET(req: NextRequest) {
   const cutoff = sevenDaysAgo.toISOString()
 
   try {
-    // Recent: last 7 days, newest first
-    const { data: recent, error: recentErr } = await supabaseServer
+    // Recent: last 7 days, fetch a pool then shuffle for randomness
+    const { data: recentPool, error: recentErr } = await supabaseServer
       .from('thoughts')
       .select('id, content, thought_type, tags, metadata, created_at')
-      .neq('thought_type', 'atlas')
       .gte('created_at', cutoff)
       .order('created_at', { ascending: false })
-      .limit(recentLimit)
+      .limit(200) // Fetch a pool to sample from
 
     if (recentErr) console.warn('[fyp] recent query error:', recentErr.message)
+
+    // Shuffle recent pool and pick
+    const recentShuffled = (recentPool || []).sort(() => Math.random() - 0.5)
+    const recent = recentShuffled.slice(0, recentLimit)
 
     // Resurfaced: older than 7 days, random sample
     // Supabase doesn't have native random, so we fetch more and shuffle
     const { data: oldPool, error: oldErr } = await supabaseServer
       .from('thoughts')
       .select('id, content, thought_type, tags, metadata, created_at')
-      .neq('thought_type', 'atlas')
       .lt('created_at', cutoff)
       .order('created_at', { ascending: false })
       .limit(200) // Fetch a pool to sample from
@@ -49,19 +52,18 @@ export async function GET(req: NextRequest) {
     if (oldErr) console.warn('[fyp] old query error:', oldErr.message)
 
     // Shuffle and pick from old pool
-    const shuffled = (oldPool || []).sort(() => Math.random() - 0.5)
-    const resurfaced = shuffled.slice(0, oldLimit)
+    const resurfaced = (oldPool || []).sort(() => Math.random() - 0.5).slice(0, oldLimit)
 
     // Combine and format
     const items = [
-      ...(recent || []).map(r => ({ ...formatItem(r), section: 'recent' as const })),
+      ...recent.map(r => ({ ...formatItem(r), section: 'recent' as const })),
       ...resurfaced.map(r => ({ ...formatItem(r), section: 'resurfaced' as const })),
     ]
 
     return NextResponse.json({
       items,
       counts: {
-        recent: (recent || []).length,
+        recent: recent.length,
         resurfaced: resurfaced.length,
         total: items.length,
       },
