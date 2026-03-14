@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
  * - Resurfaced older content (random selection from 7+ days ago)
  * 
  * Ratio: ~60% recent, ~40% resurfaced
- * Includes ALL thought types (atlas, concept, memory, testimonial, linkedin-post, etc.)
+ * Excludes linkedin* thought types — those have a dedicated page
  * Both recent and resurfaced arrays are shuffled for a fresh mix every load
  */
 export async function GET(req: NextRequest) {
@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
       .from('thoughts')
       .select('id, content, thought_type, tags, metadata, created_at')
       .gte('created_at', cutoff)
+      .not('thought_type', 'like', 'linkedin%')
       .order('created_at', { ascending: false })
       .limit(200) // Fetch a pool to sample from
 
@@ -46,6 +47,7 @@ export async function GET(req: NextRequest) {
       .from('thoughts')
       .select('id, content, thought_type, tags, metadata, created_at')
       .lt('created_at', cutoff)
+      .not('thought_type', 'like', 'linkedin%')
       .order('created_at', { ascending: false })
       .limit(200) // Fetch a pool to sample from
 
