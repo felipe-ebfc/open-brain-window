@@ -36,7 +36,8 @@ function formatContent(name: string, role?: string, company?: string, notes?: st
 }
 
 function toRelationship(row: any) {
-  const meta = (row.metadata || {}) as Record<string, unknown>
+  const raw = row.metadata || {}
+  const meta = (typeof raw === 'string' ? JSON.parse(raw) : raw) as Record<string, unknown>
 
   // New extraction pipeline format: metadata has name, company, position, sources, etc.
   if (meta.name) {
