@@ -256,45 +256,44 @@ export default function ThoughtsPage() {
         </div>
       )}
 
-      {/* Sort + Category filters */}
-      <div className="no-scrollbar" style={{
+      {/* Sort chips */}
+      <div style={{
         display: 'flex',
-        gap: 8,
-        overflowX: 'auto',
-        padding: '8px 16px 12px',
-        alignItems: 'center',
+        gap: 6,
+        padding: '8px 16px 4px',
       }}>
-        {/* Sort chips */}
-        <div style={{
-          display: 'flex',
-          gap: 6,
-          flexShrink: 0,
-          borderRight: '1px solid var(--border)',
-          paddingRight: 12,
-          marginRight: 4,
-        }}>
-          {SORT_OPTIONS.map(opt => (
-            <button
-              key={opt}
-              className={`filter-chip ${sort === opt ? 'active' : ''}`}
-              onClick={() => setSort(opt)}
-              style={{ fontSize: 11 }}
-            >
-              {opt}
-            </button>
-          ))}
-        </div>
-
-        {/* Category chips */}
-        {categories.map(cat => (
+        {SORT_OPTIONS.map(opt => (
           <button
-            key={cat}
-            className={`filter-chip ${selectedCategory === cat ? 'active' : ''}`}
-            onClick={() => setSelectedCategory(cat)}
+            key={opt}
+            className={`filter-chip ${sort === opt ? 'active' : ''}`}
+            onClick={() => setSort(opt)}
+            style={{ fontSize: 11 }}
           >
-            {cat}
+            {opt}
           </button>
         ))}
+      </div>
+
+      {/* Category chips — wrapping, not scrolling */}
+      <div style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 8,
+        padding: '8px 16px 12px',
+      }}>
+        {categories.map(cat => {
+          const count = cat === 'All' ? thoughts.length :
+            thoughts.filter(t => t.category === cat).length
+          return (
+            <button
+              key={cat}
+              className={`filter-chip ${selectedCategory === cat ? 'active' : ''}`}
+              onClick={() => setSelectedCategory(cat)}
+            >
+              {cat} <span style={{ opacity: 0.6, marginLeft: 2 }}>({count})</span>
+            </button>
+          )
+        })}
       </div>
 
       {/* Results */}

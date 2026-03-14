@@ -6,32 +6,45 @@ export const dynamic = 'force-dynamic'
 // GET /api/brain/thoughts?limit=50&offset=0&search=term
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
-  const limit = Math.min(parseInt(searchParams.get('limit') || '100'), 500)
-  const offset = parseInt(searchParams.get('offset') || '0')
+  const limit = Math.min(parseInt(searchParams.get('limit') || '500'), 2000)
   const search = searchParams.get('search') || ''
+  const category = searchParams.get('category') || ''
 
   try {
-    // Exclude embedding column — it's a huge vector, kills performance
-    let query = supabaseServer
-      .from('thoughts')
-      .select('id, content, thought_type, tags, people, source, metadata, created_at, user_id')
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
+    // Paginate past Supabase 1000-row limit
+    const allRows: any[] = []
+    let offset = 0
+    const pageSize = 500
 
-    if (search) {
-      // Full-text-style search on content (ilike is good enough for now)
-      query = query.ilike('content', `%${search}%`)
-    }
+    while (allRows.length < limit) {
+      let query = supabaseServer
+        .from('thoughts')
+        .select('id, content, thought_type, tags, people, source, metadata, created_at, user_id')
+        .neq('thought_type', 'atlas')  // Atlas has its own specialized page
+        .order('created_at', { ascending: false })
+        .range(offset, offset + pageSize - 1)
 
-    const { data, error } = await query
+      if (search) {
+        query = query.ilike('content', `%${search}%`)
+      }
 
-    if (error) {
-      console.error('[/api/brain/thoughts] Supabase error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      if (category) {
+        query = query.eq('thought_type', category)
+      }
+
+      const { data, error } = await query
+      if (error) {
+        console.error('[/api/brain/thoughts] Supabase error:', error)
+        break
+      }
+
+      allRows.push(...(data || []))
+      if (!data || data.length < pageSize) break
+      offset += pageSize
     }
 
     // Map thought_type → category to match the Thought type
-    const thoughts = (data || []).map((row) => ({
+    const thoughts = allRows.slice(0, limit).map((row) => ({
       id: row.id,
       content: row.content,
       category: row.thought_type || null,
