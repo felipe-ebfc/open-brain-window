@@ -70,13 +70,14 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Virtual table: thoughts (non-atlas) — Knowledge Base count
+  // Virtual table: thoughts (non-atlas, non-linkedin) — Knowledge Base count
   if (table === 'thoughts') {
     try {
       const { count, error } = await supabaseServer
         .from('thoughts')
         .select('*', { count: 'exact', head: true })
         .neq('thought_type', 'atlas')
+        .not('thought_type', 'like', 'linkedin%')
 
       if (error) {
         console.warn(`[/api/brain/count] Error counting thoughts:`, error.message)
@@ -101,13 +102,13 @@ export async function GET(req: NextRequest) {
     } catch { return NextResponse.json({ table, count: 0 }) }
   }
 
-  // Virtual table: linkedin_data → count thoughts where thought_type='linkedin'
+  // Virtual table: linkedin_data → count all linkedin-* thought_types
   if (table === 'linkedin_data') {
     try {
       const { count, error } = await supabaseServer
         .from('thoughts')
         .select('*', { count: 'exact', head: true })
-        .eq('thought_type', 'linkedin')
+        .like('thought_type', 'linkedin%')
       if (error) return NextResponse.json({ table, count: 0 })
       return NextResponse.json({ table, count: count ?? 0 })
     } catch { return NextResponse.json({ table, count: 0 }) }

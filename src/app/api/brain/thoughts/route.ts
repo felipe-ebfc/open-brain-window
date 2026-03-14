@@ -21,6 +21,7 @@ export async function GET(req: NextRequest) {
         .from('thoughts')
         .select('id, content, thought_type, tags, people, source, metadata, created_at, user_id')
         .neq('thought_type', 'atlas')  // Atlas has its own specialized page
+        .not('thought_type', 'like', 'linkedin%')  // LinkedIn has its own specialized page
         .order('created_at', { ascending: false })
         .range(offset, offset + pageSize - 1)
 
