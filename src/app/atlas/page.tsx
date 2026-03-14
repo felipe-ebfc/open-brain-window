@@ -20,12 +20,10 @@ type AtlasPaper = {
   created_at: string
 }
 
-// Color palette for eras (cycles if we go beyond 6)
-const ERA_PALETTE = ['#e84040', '#f5a623', '#4caf50', '#00b8a9', '#4a9eff', '#9b59b6', '#e91e63', '#ff7043']
-
 function getEraColor(era: string, allEras: string[]): string {
   const idx = allEras.indexOf(era)
-  return ERA_PALETTE[idx % ERA_PALETTE.length] || 'var(--border-bright)'
+  const hue = Math.round((idx / allEras.length) * 300)
+  return `hsl(${hue}, 70%, 55%)`
 }
 
 function PaperCard({ paper, eraColor }: { paper: AtlasPaper; eraColor: string }) {
@@ -76,6 +74,13 @@ function PaperCard({ paper, eraColor }: { paper: AtlasPaper; eraColor: string })
           {paper.year && (
             <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{paper.year}</span>
           )}
+          <span style={{
+            fontSize: 14,
+            color: 'var(--text-muted)',
+            transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+            transition: 'transform 0.15s',
+            display: 'inline-block',
+          }}>▾</span>
         </div>
       </div>
 
@@ -185,59 +190,91 @@ function EraTimeline({
   onChange: (era: string) => void
   counts: Record<string, number>
 }) {
+  const totalCount = Object.values(counts).reduce((a, b) => a + b, 0)
+
   return (
     <div style={{ padding: '0 16px 12px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 12, overflowX: 'auto' }} className="no-scrollbar">
-        {eras.map((era, i, arr) => {
+      <div style={{ display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap', gap: 4, marginBottom: 12 }}>
+        {/* All pill */}
+        <button
+          onClick={() => onChange('All')}
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 4,
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            padding: '4px 6px',
+          }}
+        >
+          <div style={{
+            width: 30,
+            height: 30,
+            borderRadius: '50%',
+            background: selectedEra === 'All' ? 'var(--accent-teal)' : 'var(--bg-elevated)',
+            border: `2px solid var(--accent-teal)`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 8,
+            fontWeight: 800,
+            color: selectedEra === 'All' ? '#0a0a0a' : 'var(--accent-teal)',
+            transition: 'all 0.15s',
+          }}>
+            All
+          </div>
+          <div style={{
+            fontSize: 8,
+            color: 'var(--text-muted)',
+            fontWeight: 600,
+          }}>
+            {totalCount}
+          </div>
+        </button>
+
+        {eras.map((era) => {
           const color = getEraColor(era, eras)
           return (
-            <div key={era} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-              <button
-                onClick={() => onChange(era === selectedEra ? 'All' : era)}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 4,
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '4px 6px',
-                }}
-              >
-                <div style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: '50%',
-                  background: selectedEra === era ? color : 'var(--bg-elevated)',
-                  border: `2px solid ${color}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 9,
-                  fontWeight: 800,
-                  color: selectedEra === era ? '#0a0a0a' : color,
-                  transition: 'all 0.15s',
-                }}>
-                  {era.replace('IGLC-', '')}
-                </div>
-                <div style={{
-                  fontSize: 9,
-                  color: 'var(--text-muted)',
-                  fontWeight: 600,
-                }}>
-                  {counts[era] ?? 0}
-                </div>
-              </button>
-              {i < arr.length - 1 && (
-                <div style={{
-                  width: 20,
-                  height: 2,
-                  background: 'var(--border)',
-                  flexShrink: 0,
-                }} />
-              )}
-            </div>
+            <button
+              key={era}
+              onClick={() => onChange(era === selectedEra ? 'All' : era)}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 4,
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '4px 6px',
+              }}
+            >
+              <div style={{
+                width: 30,
+                height: 30,
+                borderRadius: '50%',
+                background: selectedEra === era ? color : 'var(--bg-elevated)',
+                border: `2px solid ${color}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 8,
+                fontWeight: 800,
+                color: selectedEra === era ? '#0a0a0a' : color,
+                transition: 'all 0.15s',
+              }}>
+                {era.replace('IGLC-', '')}
+              </div>
+              <div style={{
+                fontSize: 8,
+                color: 'var(--text-muted)',
+                fontWeight: 600,
+              }}>
+                {counts[era] ?? 0}
+              </div>
+            </button>
           )
         })}
       </div>
@@ -345,14 +382,35 @@ export default function AtlasPage() {
       </div>
 
       {/* Search */}
-      <div style={{ padding: '16px 16px 8px' }}>
+      <div style={{ padding: '16px 16px 8px', position: 'relative' }}>
         <input
           className="search-input"
           type="search"
           placeholder="Search papers, themes, sectors…"
           value={search}
           onChange={e => setSearch(e.target.value)}
+          style={{ paddingRight: search ? 36 : undefined }}
         />
+        {search && (
+          <button
+            onClick={() => setSearch('')}
+            style={{
+              position: 'absolute',
+              right: 28,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--text-muted)',
+              fontSize: 16,
+              lineHeight: 1,
+              padding: '0 4px',
+            }}
+          >
+            ×
+          </button>
+        )}
       </div>
 
       {/* Era timeline */}
@@ -367,10 +425,10 @@ export default function AtlasPage() {
 
       {/* Category chips */}
       {categories.length > 1 && (
-        <div className="no-scrollbar" style={{
+        <div style={{
           display: 'flex',
           gap: 8,
-          overflowX: 'auto',
+          flexWrap: 'wrap',
           padding: '0 16px 16px',
         }}>
           {categories.map(cat => (
@@ -392,7 +450,7 @@ export default function AtlasPage() {
         color: 'var(--text-muted)',
         fontWeight: 600,
       }}>
-        {filtered.length} papers
+        <span style={{ color: 'var(--accent-teal)', fontWeight: 800 }}>{filtered.length}</span> papers
         {selectedEra !== 'All' && ` · ${selectedEra}`}
         {selectedCategory !== 'All' && ` · ${selectedCategory}`}
       </div>
