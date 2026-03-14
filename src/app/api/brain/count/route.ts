@@ -102,6 +102,18 @@ export async function GET(req: NextRequest) {
     } catch { return NextResponse.json({ table, count: 0 }) }
   }
 
+  // Virtual table: relationships → count thoughts where thought_type='relationship'
+  if (table === 'relationships') {
+    try {
+      const { count, error } = await supabaseServer
+        .from('thoughts')
+        .select('*', { count: 'exact', head: true })
+        .eq('thought_type', 'relationship')
+      if (error) return NextResponse.json({ table, count: 0 })
+      return NextResponse.json({ table, count: count ?? 0 })
+    } catch { return NextResponse.json({ table, count: 0 }) }
+  }
+
   // Virtual table: linkedin_data → count all linkedin-* thought_types
   if (table === 'linkedin_data') {
     try {

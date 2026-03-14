@@ -50,10 +50,13 @@ export type Testimonial = {
 export type Relationship = {
   id: string
   name: string
-  org?: string
-  last_contact?: string
-  warmth?: number // 1-5
+  role?: string | null
+  company?: string | null
+  org?: string | null // alias for company
+  last_contact?: string | null
+  warmth?: number | null // 1-5
   tags?: string[]
-  notes?: string
+  notes?: string | null
+  source?: 'manual' | 'linkedin'
   created_at: string
 }
