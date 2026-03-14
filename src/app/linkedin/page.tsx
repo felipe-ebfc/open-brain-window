@@ -185,22 +185,15 @@ function LinkedInCard({ item }: { item: LinkedInItem }) {
           }}>
             {item.content}
           </div>
-          {item.parent_url && !item.parent_post_preview && (
-            <a
-              href={item.parent_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={e => e.stopPropagation()}
-              style={{
-                display: 'inline-block',
-                marginTop: 8,
-                fontSize: 11,
-                color: '#0077b5',
-                textDecoration: 'none',
-              }}
-            >
-              View original post ↗
-            </a>
+          {item.parent_url && !item.parent_post_preview && expanded && (
+            <div style={{
+              marginTop: 8,
+              fontSize: 10,
+              color: 'var(--text-muted)',
+              fontStyle: 'italic',
+            }}>
+              Comment on another user&apos;s post
+            </div>
           )}
         </div>
       )
