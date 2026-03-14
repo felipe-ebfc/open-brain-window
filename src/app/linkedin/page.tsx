@@ -44,7 +44,7 @@ const MONTH_MAP: Record<string, number> = {
 }
 
 function getRealDate(item: LinkedInItem): Date {
-  const rawType = item.thought_type?.replace('linkedin_', '') || ''
+  const rawType = item.thought_type?.replace('linkedin-', '').replace('linkedin_', '') || ''
 
   if (rawType === 'connection' && item.metadata?.connected_on) {
     // Format: '26 Oct 2025'
@@ -74,7 +74,7 @@ function formatItemDate(item: LinkedInItem): string {
 
 function LinkedInCard({ item }: { item: LinkedInItem }) {
   const [expanded, setExpanded] = useState(false)
-  const rawType = item.thought_type?.replace('linkedin_', '') || 'item'
+  const rawType = item.thought_type?.replace('linkedin-', '').replace('linkedin_', '') || 'item'
   const typeLabel = rawType.charAt(0).toUpperCase() + rawType.slice(1)
   const isExpandable = rawType !== 'connection' && rawType !== 'endorsement' && rawType !== 'position'
 
@@ -288,7 +288,7 @@ export default function LinkedInPage() {
     if (sort !== 'Type') return null
     const groups: Record<string, LinkedInItem[]> = {}
     filtered.forEach(item => {
-      const type = item.thought_type?.replace('linkedin_', '') || 'other'
+      const type = item.thought_type?.replace('linkedin-', '').replace('linkedin_', '') || 'other'
       if (!groups[type]) groups[type] = []
       groups[type].push(item)
     })
