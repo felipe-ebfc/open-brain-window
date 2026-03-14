@@ -11,6 +11,53 @@ const TYPE_MAP: Record<string, string> = {
   positions: 'linkedin-position',
 }
 
+function extractUrn(url: string): string | null {
+  const match = url.match(/\/update\/([^?#]+)/)
+  if (!match) return null
+  try {
+    return decodeURIComponent(match[1])
+  } catch {
+    return match[1]
+  }
+}
+
+async function buildPostUrnMap(): Promise<Map<string, string>> {
+  const map = new Map<string, string>()
+  const { data } = await supabaseServer
+    .from('thoughts')
+    .select('content, metadata')
+    .eq('thought_type', 'linkedin-post')
+    .not('metadata', 'is', null)
+  if (data) {
+    for (const post of data) {
+      const link = post.metadata?.link
+      if (!link) continue
+      const urn = extractUrn(link)
+      if (!urn) continue
+      map.set(urn, (post.content || '').slice(0, 150))
+    }
+  }
+  return map
+}
+
+function enrichComments(items: any[], postUrnMap: Map<string, string>): any[] {
+  return items.map(item => {
+    if (item.thought_type !== 'linkedin-comment') return item
+    const link = item.metadata?.link
+    if (!link) return item
+    const urn = extractUrn(link)
+    if (!urn) return item
+    if (postUrnMap.has(urn)) {
+      return { ...item, parent_post_preview: postUrnMap.get(urn) }
+    }
+    try {
+      return { ...item, parent_url: decodeURIComponent(link) }
+    } catch {
+      return { ...item, parent_url: link }
+    }
+  })
+}
+
 // GET /api/brain/linkedin?type=posts&limit=50&offset=0
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -29,6 +76,8 @@ export async function GET(req: NextRequest) {
     })
     const countsArr = await Promise.all(countPromises)
     const counts = Object.fromEntries(countsArr) as Record<string, number>
+
+    const needsCommentEnrichment = type === 'comments' || type === 'all'
 
     // Fetch items for the requested type
     let items: any[] = []
@@ -78,6 +127,11 @@ export async function GET(req: NextRequest) {
         batchOffset += pageSize
       }
       items = allRows.slice(0, limit)
+    }
+
+    if (needsCommentEnrichment) {
+      const postUrnMap = await buildPostUrnMap()
+      items = enrichComments(items, postUrnMap)
     }
 
     return NextResponse.json({ items, counts, type })

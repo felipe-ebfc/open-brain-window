@@ -13,6 +13,8 @@ type LinkedInItem = {
   tags: string[]
   metadata: Record<string, any> | null
   created_at: string
+  parent_post_preview?: string
+  parent_url?: string
 }
 
 type Counts = {
@@ -153,7 +155,58 @@ function LinkedInCard({ item }: { item: LinkedInItem }) {
       )
     }
 
-    // Posts and comments
+    // Comments — with optional parent context
+    if (rawType === 'comment') {
+      return (
+        <div>
+          {item.parent_post_preview && (
+            <div style={{
+              background: 'var(--bg-elevated)',
+              borderLeft: '3px solid var(--text-muted)',
+              borderRadius: '0 6px 6px 0',
+              padding: '6px 10px',
+              marginBottom: 8,
+            }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Replying to your post:
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontStyle: 'italic', lineHeight: 1.4 }}>
+                {item.parent_post_preview}{item.parent_post_preview.length === 150 ? '…' : ''}
+              </div>
+            </div>
+          )}
+          <div style={{
+            fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.5,
+            display: expanded ? 'block' : '-webkit-box',
+            WebkitLineClamp: expanded ? 'unset' : 3,
+            WebkitBoxOrient: 'vertical' as const,
+            overflow: expanded ? 'visible' : 'hidden',
+            whiteSpace: 'pre-line',
+          }}>
+            {item.content}
+          </div>
+          {item.parent_url && !item.parent_post_preview && (
+            <a
+              href={item.parent_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              style={{
+                display: 'inline-block',
+                marginTop: 8,
+                fontSize: 11,
+                color: '#0077b5',
+                textDecoration: 'none',
+              }}
+            >
+              View original post ↗
+            </a>
+          )}
+        </div>
+      )
+    }
+
+    // Posts
     return (
       <div style={{
         fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.5,
