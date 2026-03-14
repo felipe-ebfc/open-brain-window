@@ -89,6 +89,30 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Virtual table: testimonials → count thoughts where thought_type='testimonial'
+  if (table === 'testimonials') {
+    try {
+      const { count, error } = await supabaseServer
+        .from('thoughts')
+        .select('*', { count: 'exact', head: true })
+        .eq('thought_type', 'testimonial')
+      if (error) return NextResponse.json({ table, count: 0 })
+      return NextResponse.json({ table, count: count ?? 0 })
+    } catch { return NextResponse.json({ table, count: 0 }) }
+  }
+
+  // Virtual table: linkedin_data → count thoughts where thought_type='linkedin'
+  if (table === 'linkedin_data') {
+    try {
+      const { count, error } = await supabaseServer
+        .from('thoughts')
+        .select('*', { count: 'exact', head: true })
+        .eq('thought_type', 'linkedin')
+      if (error) return NextResponse.json({ table, count: 0 })
+      return NextResponse.json({ table, count: count ?? 0 })
+    } catch { return NextResponse.json({ table, count: 0 }) }
+  }
+
   // Tables that haven't been created yet → return 0, no error
   if (!KNOWN_TABLES.has(table)) {
     return NextResponse.json({ table, count: 0 })

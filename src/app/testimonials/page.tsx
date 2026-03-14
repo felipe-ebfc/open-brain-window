@@ -3,187 +3,188 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, useMemo } from 'react'
-import { Testimonial } from '@/lib/supabase'
 import { NavHeader } from '@/components/NavHeader'
-import { LoadingSkeleton } from '@/components/LoadingSkeleton'
+
+type Testimonial = {
+  id: string
+  content: string
+  metadata: {
+    testimonial_num?: number
+    rating?: number
+    theme?: string
+    training?: string
+  } | null
+  tags: string[]
+  created_at: string
+}
+
+const THEME_COLORS: Record<string, string> = {
+  'Engagement': '#4caf50',
+  'Teaching Style': '#4a9eff',
+  'Humor & Energy': '#ff9800',
+  'Practical Application': 'var(--accent-teal)',
+  'Real-World Examples': '#9b59b6',
+  'Course Structure': '#e91e63',
+  'Recommendation': 'var(--accent-gold)',
+  'Knowledge Depth': '#00b8a9',
+  'Improvement Suggestion': '#ff7043',
+}
 
 function StarRating({ rating }: { rating: number }) {
   return (
-    <div style={{ display: 'flex', gap: 2 }}>
-      {[1, 2, 3, 4, 5].map(i => (
-        <span key={i} style={{
-          fontSize: 12,
-          color: i <= rating ? 'var(--accent-gold)' : 'var(--border-bright)',
-        }}>★</span>
-      ))}
-    </div>
-  )
-}
-
-function TestimonialCard({ item }: { item: Testimonial }) {
-  return (
-    <div style={{
-      background: 'var(--bg-card)',
-      border: '1px solid var(--border)',
-      borderRadius: 12,
-      padding: 14,
-      borderLeft: '3px solid var(--accent-gold)',
-    }}>
-      <div style={{
-        fontSize: 14,
-        color: 'var(--text-primary)',
-        lineHeight: 1.5,
-        fontStyle: 'italic',
-      }}>
-        &ldquo;{item.quote}&rdquo;
-      </div>
-      <div style={{
-        marginTop: 10,
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-      }}>
-        <div>
-          {item.author && (
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>
-              {item.author}
-            </div>
-          )}
-          {item.session && (
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-              {item.session}
-            </div>
-          )}
-        </div>
-        {item.rating && <StarRating rating={item.rating} />}
-      </div>
-    </div>
+    <span style={{ fontSize: 14, letterSpacing: 2 }}>
+      {'★'.repeat(rating)}{'☆'.repeat(5 - rating)}
+    </span>
   )
 }
 
 export default function TestimonialsPage() {
-  const [items, setItems] = useState<Testimonial[]>([])
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [minRating, setMinRating] = useState(0)
+  const [selectedTheme, setSelectedTheme] = useState('All')
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    // testimonials table not yet created — returns empty gracefully
-    setLoading(false)
+    async function load() {
+      try {
+        const res = await fetch('/api/brain/thoughts?category=testimonial&limit=200')
+        if (!res.ok) throw new Error(`API error: ${res.status}`)
+        const data = await res.json()
+        setTestimonials((data.thoughts || []).map((t: any) => ({
+          ...t, metadata: t.metadata || {}
+        })))
+      } catch (err) {
+        console.error('Failed to load testimonials:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
   }, [])
 
-  const sessions = useMemo(() => {
-    const s = new Set(items.map(i => i.session).filter(Boolean) as string[])
-    return ['All', ...Array.from(s).sort()]
-  }, [items])
-
-  const [selectedSession, setSelectedSession] = useState('All')
-
-  const filtered = useMemo(() => {
-    return items.filter(i => {
-      const matchSession = selectedSession === 'All' || i.session === selectedSession
-      const matchRating = !minRating || (i.rating || 0) >= minRating
-      const matchSearch = !search ||
-        i.quote.toLowerCase().includes(search.toLowerCase()) ||
-        (i.author || '').toLowerCase().includes(search.toLowerCase())
-      return matchSession && matchRating && matchSearch
-    })
-  }, [items, selectedSession, minRating, search])
+  const themes = useMemo(() => {
+    const t = new Set(testimonials.map(t => t.metadata?.theme).filter(Boolean) as string[])
+    return ['All', ...Array.from(t).sort()]
+  }, [testimonials])
 
   const avgRating = useMemo(() => {
-    const rated = items.filter(i => i.rating)
-    if (!rated.length) return 0
-    return (rated.reduce((sum, i) => sum + (i.rating || 0), 0) / rated.length).toFixed(1)
-  }, [items])
+    const ratings = testimonials.map(t => t.metadata?.rating).filter(Boolean) as number[]
+    return ratings.length ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) : '—'
+  }, [testimonials])
+
+  const filtered = useMemo(() => {
+    if (selectedTheme === 'All') return testimonials
+    return testimonials.filter(t => t.metadata?.theme === selectedTheme)
+  }, [testimonials, selectedTheme])
 
   return (
     <main style={{ background: 'var(--bg-base)', minHeight: '100dvh', paddingBottom: 32 }}>
       <NavHeader title="RSM Testimonials" back />
 
-      {/* Stats */}
       <div style={{
-        display: 'flex',
-        borderBottom: '1px solid var(--border)',
-        padding: '12px 16px',
-        background: 'var(--bg-surface)',
+        display: 'flex', gap: 0, borderBottom: '1px solid var(--border)',
+        padding: '12px 16px', background: 'var(--bg-surface)',
       }}>
         <div style={{ flex: 1, textAlign: 'center' }}>
-          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--accent-gold)', letterSpacing: '-0.04em' }}>
-            {items.length}
+          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--accent-gold)' }}>
+            {loading ? '—' : testimonials.length}
           </div>
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Total</div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Reviews</div>
         </div>
         <div style={{ width: 1, background: 'var(--border)' }} />
         <div style={{ flex: 1, textAlign: 'center' }}>
-          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--accent-gold)', letterSpacing: '-0.04em' }}>
+          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--accent-gold)' }}>
             {avgRating}
           </div>
           <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Avg Rating</div>
         </div>
         <div style={{ width: 1, background: 'var(--border)' }} />
         <div style={{ flex: 1, textAlign: 'center' }}>
-          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--accent-gold)', letterSpacing: '-0.04em' }}>
-            {sessions.length - 1}
+          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--accent-gold)' }}>
+            33
           </div>
           <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Sessions</div>
         </div>
       </div>
 
-      {/* Search */}
-      <div style={{ padding: '16px 16px 8px' }}>
-        <input
-          className="search-input"
-          type="search"
-          placeholder="Search quotes, authors…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '12px 16px' }}>
+        {themes.map(theme => {
+          const count = theme === 'All' ? testimonials.length :
+            testimonials.filter(t => t.metadata?.theme === theme).length
+          return (
+            <button
+              key={theme}
+              className={`filter-chip ${selectedTheme === theme ? 'active' : ''}`}
+              onClick={() => setSelectedTheme(theme)}
+            >
+              {theme} ({count})
+            </button>
+          )
+        })}
       </div>
 
-      {/* Filter: Rating */}
-      <div className="no-scrollbar" style={{
-        display: 'flex',
-        gap: 8,
-        overflowX: 'auto',
-        padding: '8px 16px 12px',
-      }}>
-        {[0, 3, 4, 5].map(r => (
-          <button
-            key={r}
-            className={`filter-chip ${minRating === r ? 'active' : ''}`}
-            onClick={() => setMinRating(r)}
-          >
-            {r === 0 ? 'All ratings' : `${r}★+`}
-          </button>
-        ))}
-        <div style={{ width: 1, background: 'var(--border)', flexShrink: 0 }} />
-        {sessions.map(s => (
-          <button
-            key={s}
-            className={`filter-chip ${selectedSession === s ? 'active' : ''}`}
-            onClick={() => setSelectedSession(s)}
-          >
-            {s}
-          </button>
-        ))}
+      <div style={{ padding: '0 16px 12px', fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>
+        <span style={{ color: 'var(--accent-gold)', fontWeight: 800 }}>{filtered.length}</span> testimonials
+        {selectedTheme !== 'All' && ` · ${selectedTheme}`}
       </div>
 
-      <div style={{ padding: '0 16px 4px', fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>
-        {filtered.length} responses
-      </div>
-
-      <div style={{ padding: '8px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {loading ? (
-          <LoadingSkeleton count={5} height={100} />
-        ) : filtered.length === 0 ? (
-          <div style={{ color: 'var(--text-muted)', fontSize: 14, padding: '20px 0', textAlign: 'center' }}>
-            No testimonials match your filters.
-          </div>
-        ) : (
-          filtered.map(item => (
-            <TestimonialCard key={item.id} item={item} />
+          Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="skeleton" style={{ height: 100, borderRadius: 12 }} />
           ))
-        )}
+        ) : filtered.map(t => {
+          const theme = t.metadata?.theme || 'Other'
+          const color = THEME_COLORS[theme] || 'var(--border-bright)'
+          const isExpanded = expanded.has(t.id)
+
+          return (
+            <div
+              key={t.id}
+              className="paper-card pressable"
+              onClick={() => setExpanded(prev => {
+                const next = new Set(prev)
+                if (next.has(t.id)) next.delete(t.id)
+                else next.add(t.id)
+                return next
+              })}
+              style={{ borderLeft: `3px solid ${color}`, cursor: 'pointer' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ color: 'var(--accent-gold)' }}>
+                    <StarRating rating={t.metadata?.rating || 5} />
+                  </span>
+                  <span style={{
+                    padding: '2px 8px', borderRadius: 9999,
+                    background: `${color}20`, border: `1px solid ${color}40`,
+                    fontSize: 10, fontWeight: 700, color,
+                  }}>
+                    {theme}
+                  </span>
+                </div>
+                <div style={{
+                  fontSize: 14, color: 'var(--text-muted)',
+                  transition: 'transform 0.15s',
+                  transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                }}>▾</div>
+              </div>
+              <div style={{
+                fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.5,
+                fontStyle: 'italic',
+                display: isExpanded ? 'block' : '-webkit-box',
+                WebkitLineClamp: isExpanded ? 'unset' : 3,
+                WebkitBoxOrient: 'vertical' as const,
+                overflow: isExpanded ? 'visible' : 'hidden',
+              }}>
+                "{t.content}"
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8 }}>
+                #{t.metadata?.testimonial_num} · {t.metadata?.training}
+              </div>
+            </div>
+          )
+        })}
       </div>
     </main>
   )
