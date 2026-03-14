@@ -127,17 +127,47 @@ function PaperCard({ paper, eraColor }: { paper: AtlasPaper; eraColor: string })
         )}
       </div>
 
-      {expanded && paper.summary && (
+      {expanded && (
         <div style={{
           marginTop: 10,
-          fontSize: 13,
-          color: 'var(--text-secondary)',
-          lineHeight: 1.6,
           borderTop: '1px solid var(--border)',
           paddingTop: 10,
-          whiteSpace: 'pre-line',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
         }}>
-          {paper.summary}
+          {/* Metadata row */}
+          <div style={{
+            display: 'flex',
+            gap: 6,
+            flexWrap: 'wrap',
+            fontSize: 11,
+            color: 'var(--text-muted)',
+          }}>
+            {paper.era && <span>IGLC-{paper.era.replace('IGLC-', '')}</span>}
+            {paper.year && <span>{paper.year}</span>}
+            {paper.authors && <span>• {paper.authors}</span>}
+          </div>
+
+          {/* Summary or fallback */}
+          {paper.summary ? (
+            <div style={{
+              fontSize: 13,
+              color: 'var(--text-secondary)',
+              lineHeight: 1.6,
+              whiteSpace: 'pre-line',
+            }}>
+              {paper.summary}
+            </div>
+          ) : (
+            <div style={{
+              fontSize: 12,
+              color: 'var(--text-muted)',
+              fontStyle: 'italic',
+            }}>
+              No summary available.
+            </div>
+          )}
         </div>
       )}
     </div>
